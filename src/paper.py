@@ -24,6 +24,11 @@ from scipy.stats import pearsonr, spearmanr
 import numpy.ma as ma
 from sklearn.metrics import precision_recall_curve,auc,roc_curve,accuracy_score
 
+# for publication ready figure
+import matplotlib as mpl
+mpl.rcParams['pdf.fonttype'] = 42
+mpl.rcParams['ps.fonttype'] = 42
+mpl.rcParams['font.family'] = 'Arial'
 
 '''main program starts'''
 
@@ -34,20 +39,63 @@ uids = adata.obs_names.tolist()
 fig1. visualize the Y, the cpm of count
 using these three examples:
 '''
-from torch.distributions import LogNormal
-fig,ax = plt.subplots()
-scale = 0.5
-ys = {}
-for mu in [0.1,2.,4.]:
-    m = LogNormal(torch.tensor(mu),torch.tensor(scale))
-    y = [m.sample().numpy() for i in range(3644)]
-    ys[mu] = y
-df = pd.DataFrame(data=ys)
-print(df)
-sns.histplot(df,ax=ax)
-plt.savefig('check.pdf',bbox_inches='tight')
-plt.close()
-sys.exit('stop')
+from scipy.stats import lognorm,poisson,beta
+import matplotlib.lines as mlines
+# fig,ax = plt.subplots(figsize=(12,4.8))
+# scale = 1
+# for s,loc,c in [(1.5,0.1,'#5496BF'),(0.5,1,'#F28749'),(0.3,2.5,'#68BF65')]:
+#     y = lognorm.rvs(s=s,loc=loc,scale=scale,size=3644)
+#     y = y[y<6]
+#     sns.histplot(y,ax=ax,stat='density',binwidth=0.1,alpha=0.5)
+#     x = np.linspace(lognorm.ppf(0.01,s=s,loc=loc,scale=scale),lognorm.ppf(0.99,s=s,loc=loc,scale=scale),1000)
+#     y = lognorm.pdf(x,s=s,loc=loc,scale=scale)
+#     ax.plot(x,y,c=c,linewidth=2)
+# ax.legend(handles=[mlines.Line2D([],[],linestyle='-',color=i) for i in ['#5496BF','#F28749','#68BF65']],labels=['LogNormal(0.1,1.5)','LogNormal(1.0,0.5)','LogNormal(2.5,0.3)'],frameon=False,loc='upper left',bbox_to_anchor=(1,1))
+# ax.set_xlim([0,6])
+# ax.set_xlabel('Normalized Count from RNA-Seq')
+# plt.savefig('Y.pdf',bbox_inches='tight')
+# plt.close()
+
+'''
+fig1. visualize X, the tissue distribution
+'''
+# fig,axes = plt.subplots(figsize=(2,4.8),nrows=3,gridspec_kw={'hspace':0.2},sharex='all')
+# axes = axes.flatten()
+# for i,(mu,c) in enumerate(zip([2,12,20],['#5496BF','#F28749','#68BF65'])):
+#     y = poisson.rvs(mu=mu,size=10000)
+#     sns.histplot(y,ax=axes[i],stat='probability',binwidth=0.6,facecolor='k')
+#     x = np.round(np.linspace(poisson.ppf(0.01,mu=mu),poisson.ppf(0.99,mu=mu),1000))
+#     y = poisson.pmf(x,mu=mu)
+#     x_ = x[y>0]
+#     y_ = y[y>0]
+#     axes[i].plot(x_,y_,marker='o',markersize=2,linestyle='-',c=c,linewidth=1)
+#     axes[i].legend(handles=[mlines.Line2D([],[],linestyle='-',color=c)],labels=['Poisson({})'.format(mu)],frameon=False,loc='upper left',bbox_to_anchor=(1,1))
+# axes[2].set_xlabel('Number of Expressed samples per tissue')
+# plt.savefig('X.pdf',bbox_inches='tight')
+# plt.close()
+
+
+'''
+fig1, bayesTS, beta
+'''
+# fig,ax = plt.subplots(figsize=(6.4,4.8))
+# for a,b,c in [(0.5,5,'#5496BF'),(5,5,'#F28749'),(9,0.1,'#68BF65')]:
+#     x = np.linspace(beta.ppf(0.001,a=a,b=b),beta.ppf(0.999,a=a,b=b),1000)
+#     y = beta.pdf(x,a=a,b=b)
+#     y[y>3] = 3
+#     ax.plot(x,y,c=c,linewidth=2)
+# ax.legend(handles=[mlines.Line2D([],[],linestyle='-',color=i) for i in ['#5496BF','#F28749','#68BF65']],labels=['Beta(0.5,5)','Beta(5,5)','Beta(9,0.1)'],frameon=False,loc='upper left',bbox_to_anchor=(1,1))
+# ax.set_xlabel('Tumor specificity')
+# ax.set_ylim([0,3])
+# ax.set_ylabel('Probability')
+# plt.savefig('sigma.pdf',bbox_inches='tight')
+# plt.close()
+
+'''
+fig1B, 3d plot, in gene_protien_model
+'''
+
+
 
 
 

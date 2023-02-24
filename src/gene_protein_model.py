@@ -24,6 +24,11 @@ from scipy.stats import pearsonr, spearmanr
 import numpy.ma as ma
 from sklearn.metrics import precision_recall_curve,auc,roc_curve,accuracy_score
 
+import matplotlib as mpl
+mpl.rcParams['pdf.fonttype'] = 42
+mpl.rcParams['ps.fonttype'] = 42
+mpl.rcParams['font.family'] = 'Arial'
+
 # functions
 def compute_y(adata,uids):
     info = adata[uids,:]
@@ -399,21 +404,23 @@ Z_mean = MinMaxScaler().fit_transform(result['Z_mean'].values.reshape(-1,1)).squ
 # plt.savefig('check.pdf',bbox_inches='tight')
 # plt.close()
 
-# 3d plot
-fig = plt.figure()
-ax = fig.add_subplot(projection='3d')
-xs = X_mean
-ys = Y_mean
-zs = Z_mean
-ax.scatter(xs, ys, zs, marker='o',s=1,c=1-sigma)
-ax.set_xlabel('X Label')
-ax.set_ylabel('Y Label')
-ax.set_zlabel('Z Label')
-ax.set_ylim([0,1])
-ax.set_zlim([1,0])
-ax.view_init(elev=0,azim=-100)
-plt.savefig('3d.pdf',bbox_inches='tight')
-plt.close()
+# # 3d plot
+# from matplotlib import cm
+# fig = plt.figure()
+# ax = fig.add_subplot(projection='3d')
+# xs = X_mean
+# ys = Y_mean
+# zs = Z_mean
+# ax.scatter(xs, ys, zs, marker='o',s=1,c=sigma)
+# ax.set_xlabel('Tissue Distribution')
+# ax.set_ylabel('Count Evidence')
+# ax.set_zlabel('Protein Level')
+# ax.set_ylim([0,0.3])
+# ax.tick_params(length=0,labelsize=0,color='w',labelcolor='w')
+# fig.colorbar(cm.ScalarMappable(norm=None, cmap='viridis'), ax=ax)
+# plt.savefig('3d.pdf',bbox_inches='tight')
+# plt.close()
+
 
 target = pd.read_csv('../gene/CARTargets.txt',sep='\t',index_col=0)
 mapping = {e:g for g,e in target['Ensembl ID'].to_dict().items()}
@@ -429,6 +436,7 @@ ax.bar(x=np.arange(result.shape[0]),height=result['mean_sigma'].values)
 ax.set_xticks(np.arange(result.shape[0]))
 ax.set_xticklabels(result['gene'].values,fontsize=1,rotation=90)
 ax.set_ylabel('inferred sigma')
+ax.set_title('55 CAR-T Target in clinical trial')
 plt.savefig('targets.pdf',bbox_inches='tight')
 plt.close()
 
@@ -436,7 +444,8 @@ fig,ax = plt.subplots()
 result['Z_mean'] *= -1
 ax.imshow(MinMaxScaler().fit_transform(result.loc[:,['Y_mean','X_mean','Z_mean']].values).T)
 ax.set_yticks([0,1,2])
-ax.set_yticks(['Y','X','Z'])
+ax.set_yticklabels(['Count Evidence','Tissue Distribution','Protein Level'])
+ax.set_title('Evidence')
 plt.savefig('evidence_targets.pdf',bbox_inches='tight')
 plt.close()
 
