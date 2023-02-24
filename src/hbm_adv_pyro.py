@@ -24,6 +24,11 @@ from scipy.stats import pearsonr, spearmanr
 import numpy.ma as ma
 from sklearn.metrics import precision_recall_curve,auc,roc_curve,accuracy_score
 
+import matplotlib as mpl
+mpl.rcParams['pdf.fonttype'] = 42
+mpl.rcParams['ps.fonttype'] = 42
+mpl.rcParams['font.family'] = 'Arial'
+
 # functions
 def compute_y(adata,uids):
     info = adata[uids,:]
@@ -272,30 +277,38 @@ to do that, let's first visualize the tissue distribution of 71 targets'''
 # plt.savefig('tissue.pdf',bbox_inches='tight')
 # plt.close()
 
-# # test CTAG1B
-# data = {}
-# for p in ['sigmas_downweigh_0.1.p','sigmas_downweigh_0.2.p','sigmas_downweigh_0.3.p','sigmas_downweigh_0.4.p','sigmas_default.p']:
-#     with open(p,'rb') as f:
-#         d = pickle.load(f)
-#         data[p] = d
-# df = pd.DataFrame(data)
-# sns.barplot(df)
-# plt.savefig('tissue.pdf',bbox_inches='tight')
-# plt.close()
+# test CTAG1B
+data = {}
+for p in ['CTAG1B/sigmas_downweigh_0.1.p','CTAG1B/sigmas_downweigh_0.2.p','CTAG1B/sigmas_downweigh_0.3.p','CTAG1B/sigmas_downweigh_0.4.p','CTAG1B/sigmas_default.p']:
+    with open(p,'rb') as f:
+        d = pickle.load(f)
+        data[os.path.basename(p).split('_')[-1]] = d
+df = pd.DataFrame(data)
+fig,ax = plt.subplots()
+sns.barplot(df,ax=ax)
+ax.set_ylabel('NY-ESO-1 (CTAG1B) tumor specificity')
+ax.tick_params(axis='x',rotation=90)
+ax.set_title('Downweigh male-specific organ')
+plt.savefig('../paper/tissue_CTAG1B.pdf',bbox_inches='tight')
+plt.close()
 
 
-# # test MS4A1
-# data = {}
-# for p in ['sigmas_upweigh.p','sigmas_default.p','sigmas_downweigh.p']:
-#     with open(p,'rb') as f:
-#         d = pickle.load(f)
-#         data[p] = d
-# df = pd.DataFrame(data)
-# sns.barplot(df)
-# plt.savefig('tissue.pdf',bbox_inches='tight')
-# plt.close()
+# test MS4A1
+data = {}
+for p in ['MS4A1/sigmas_upweigh.p','MS4A1/sigmas_default.p','MS4A1/sigmas_downweigh.p']:
+    with open(p,'rb') as f:
+        d = pickle.load(f)
+        data[os.path.basename(p).split('_')[-1]] = d
+df = pd.DataFrame(data)
+fig,ax = plt.subplots()
+sns.barplot(df,ax=ax)
+ax.set_ylabel('CD20 (MS4A1) tumor specificity')
+ax.tick_params(axis='x',rotation=90)
+ax.set_title('Downweigh Immune tissues')
+plt.savefig('../paper/tissue_MS4A1.pdf',bbox_inches='tight')
+plt.close()
 
-
+sys.exit('stop')
 
 # target = pd.read_csv('CARTargets.txt',sep='\t',index_col=0)
 # mapping = {e:g for g,e in target['Ensembl ID'].to_dict().items()}
