@@ -264,6 +264,206 @@ def compute_z(adata,protein,dic):
     return Z,adata,uids
 
 '''model definition'''
+def model_X_Y(X,Y,weights,train):
+    subsample_size = 10
+    a = torch.tensor(2.,device=device)
+    b = torch.tensor(2.,device=device)
+    sigma = pyro.sample('sigma',dist.Beta(a,b).expand([n]).to_event(1))
+    a = torch.tensor(10.,device=device)
+    b = torch.tensor(1.,device=device)
+    beta_y = pyro.sample('beta_y',dist.Gamma(a,b))
+    a = torch.tensor(25.,device=device)
+    b = torch.tensor(1.,device=device)
+    beta_x = pyro.sample('beta_x',dist.Gamma(a,b))
+    a = torch.tensor(50.,device=device)
+    total = pyro.sample('total',dist.Binomial(a,weights).expand([t]).to_event(1))
+    scaled_X = torch.round(X * total.unsqueeze(-1))
+    if train:
+        with pyro.poutine.scale(scale=1/875), pyro.plate('data_X',t,subsample_size=subsample_size) as ind:
+            ind = ind.to(device=device)
+            c = pyro.sample('c',dist.Poisson(beta_x*sigma).expand([subsample_size,n]).to_event(1),obs=scaled_X.index_select(0,ind))
+        with pyro.poutine.scale(scale=1/5000), pyro.plate('data_Y',s,subsample_size=subsample_size) as ind:
+            ind = ind.to(device=device)
+            nc = pyro.sample('nc',dist.LogNormal(beta_y*sigma,0.5).expand([subsample_size,n]).to_event(1),obs=Y.index_select(0,ind))
+    else:
+        with pyro.poutine.scale(scale=1/875), pyro.plate('data_X',t):
+            c = pyro.sample('c',dist.Poisson(beta_x*sigma).expand([t,n]).to_event(1),obs=scaled_X)
+        with pyro.poutine.scale(scale=1/5000), pyro.plate('data_Y',s):
+            nc = pyro.sample('nc',dist.LogNormal(beta_y*sigma,0.5).expand([s,n]).to_event(1),obs=Y)
+    return {'c':c,'nc':nc}
+
+def guide_X_Y(X,Y,weights,train):
+    alpha = pyro.param('alpha',lambda:torch.tensor(np.full(n,2.0),device=device),constraint=constraints.positive)
+    beta = pyro.param('beta',lambda:torch.tensor(np.full(n,2.0),device=device),constraint=constraints.positive)
+    sigma = pyro.sample('sigma',dist.Beta(alpha,beta).expand([n]).to_event(1))
+    a = torch.tensor(10.,device=device)
+    b = torch.tensor(1.,device=device)
+    beta_y = pyro.sample('beta_y',dist.Gamma(a,b))
+    a = torch.tensor(25.,device=device)
+    b = torch.tensor(1.,device=device)
+    beta_x = pyro.sample('beta_x',dist.Gamma(a,b))
+    total = pyro.sample('total',dist.Binomial(50,weights).expand([t]).to_event(1))
+    return {'sigma':sigma}
+
+
+def model_Y_Z(Y,Z,train):
+    subsample_size=10
+    a = torch.tensor(2.,device=device)
+    b = torch.tensor(2.,device=device)
+    sigma = pyro.sample('sigma',dist.Beta(a,b).expand([n]).to_event(1))
+    a = torch.tensor(10.,device=device)
+    b = torch.tensor(1.,device=device)
+    beta_y = pyro.sample('beta_y',dist.Gamma(a,b))
+    high_prob = 2./3. * sigma
+    medium_prob = 1./3. * sigma
+    low_prob = 2./3. * (1-sigma)
+    not_prob = 1./3. * (1-sigma)
+    prob = torch.stack([high_prob,medium_prob,low_prob,not_prob],axis=0).T   # n * p
+    if train:
+        with pyro.poutine.scale(scale=1/5000), pyro.plate('data_Y',s,subsample_size=subsample_size) as ind:
+            ind = ind.to(device=device)
+            nc = pyro.sample('nc',dist.LogNormal(beta_y*sigma,0.5).expand([subsample_size,n]).to_event(1),obs=Y.index_select(0,ind))
+        with pyro.poutine.scale(scale=1), pyro.plate('data_Z',p,subsample_size=subsample_size) as ind:
+            ind = ind.to(device=device)
+            pc = pyro.sample('pc',dist.Categorical(prob).expand([subsample_size,n]).to_event(1),obs=Z.index_select(0,ind))
+    else:
+        with pyro.poutine.scale(scale=1/5000), pyro.plate('data_Y',s):
+            nc = pyro.sample('nc',dist.LogNormal(beta_y*sigma,0.5).expand([s,n]).to_event(1),obs=Y)
+        with pyro.poutine.scale(scale=1), pyro.plate('data_Z',p):
+            pc = pyro.sample('pc',dist.Categorical(prob).expand([p,n]).to_event(1),obs=Z)
+    return {'nc':nc,'pc':pc}
+
+def guide_Y_Z(Y,Z,train):
+    alpha = pyro.param('alpha',lambda:torch.tensor(np.full(n,2.0),device=device),constraint=constraints.positive)
+    beta = pyro.param('beta',lambda:torch.tensor(np.full(n,2.0),device=device),constraint=constraints.positive)
+    sigma = pyro.sample('sigma',dist.Beta(alpha,beta).expand([n]).to_event(1))
+    a = torch.tensor(10.,device=device)
+    b = torch.tensor(1.,device=device)
+    beta_y = pyro.sample('beta_y',dist.Gamma(a,b))
+    return {'sigma':sigma}
+
+def model_X_Z(X,Z,weights,train):
+    subsample_size = 10
+    a = torch.tensor(2.,device=device)
+    b = torch.tensor(2.,device=device)
+    sigma = pyro.sample('sigma',dist.Beta(a,b).expand([n]).to_event(1))
+    a = torch.tensor(25.,device=device)
+    b = torch.tensor(1.,device=device)
+    beta_x = pyro.sample('beta_x',dist.Gamma(a,b))
+    a = torch.tensor(50.,device=device)
+    total = pyro.sample('total',dist.Binomial(a,weights).expand([t]).to_event(1))
+    scaled_X = torch.round(X * total.unsqueeze(-1))
+    high_prob = 2./3. * sigma
+    medium_prob = 1./3. * sigma
+    low_prob = 2./3. * (1-sigma)
+    not_prob = 1./3. * (1-sigma)
+    prob = torch.stack([high_prob,medium_prob,low_prob,not_prob],axis=0).T   # n * p
+    if train:
+        with pyro.poutine.scale(scale=1/875), pyro.plate('data_X',t,subsample_size=subsample_size) as ind:
+            ind = ind.to(device=device)
+            c = pyro.sample('c',dist.Poisson(beta_x*sigma).expand([subsample_size,n]).to_event(1),obs=scaled_X.index_select(0,ind))
+        with pyro.poutine.scale(scale=1), pyro.plate('data_Z',p,subsample_size=subsample_size) as ind:
+            ind = ind.to(device=device)
+            pc = pyro.sample('pc',dist.Categorical(prob).expand([subsample_size,n]).to_event(1),obs=Z.index_select(0,ind))
+    else:
+        with pyro.poutine.scale(scale=1/875), pyro.plate('data_X',t):
+            c = pyro.sample('c',dist.Poisson(beta_x*sigma).expand([t,n]).to_event(1),obs=scaled_X)
+        with pyro.poutine.scale(scale=1), pyro.plate('data_Z',p):
+            pc = pyro.sample('pc',dist.Categorical(prob).expand([p,n]).to_event(1),obs=Z)
+    return {'c':c,'pc':pc}
+
+def guide_X_Z(X,Z,weights,train):
+    alpha = pyro.param('alpha',lambda:torch.tensor(np.full(n,2.0),device=device),constraint=constraints.positive)
+    beta = pyro.param('beta',lambda:torch.tensor(np.full(n,2.0),device=device),constraint=constraints.positive)
+    sigma = pyro.sample('sigma',dist.Beta(alpha,beta).expand([n]).to_event(1))
+    a = torch.tensor(25.,device=device)
+    b = torch.tensor(1.,device=device)
+    beta_x = pyro.sample('beta_x',dist.Gamma(a,b))
+    total = pyro.sample('total',dist.Binomial(50,weights).expand([t]).to_event(1))
+    return {'sigma':sigma}
+
+def model_Y(Y,train):
+    subsample_size = 10
+    a = torch.tensor(2.,device=device)
+    b = torch.tensor(2.,device=device)
+    sigma = pyro.sample('sigma',dist.Beta(a,b).expand([n]).to_event(1))
+    a = torch.tensor(10.,device=device)
+    b = torch.tensor(1.,device=device)
+    beta_y = pyro.sample('beta_y',dist.Gamma(a,b))
+    if train:
+        with pyro.poutine.scale(scale=1), pyro.plate('data_Y',s,subsample_size=subsample_size) as ind:
+            ind = ind.to(device=device)
+            nc = pyro.sample('nc',dist.LogNormal(beta_y*sigma,0.5).expand([subsample_size,n]).to_event(1),obs=Y.index_select(0,ind))
+    else:
+        with pyro.poutine.scale(scale=1), pyro.plate('data_Y',s):
+            nc = pyro.sample('nc',dist.LogNormal(beta_y*sigma,0.5).expand([s,n]).to_event(1),obs=Y)
+    return {'nc':nc}   
+
+def guide_Y(Y,train):
+    alpha = pyro.param('alpha',lambda:torch.tensor(np.full(n,2.0),device=device),constraint=constraints.positive)
+    beta = pyro.param('beta',lambda:torch.tensor(np.full(n,2.0),device=device),constraint=constraints.positive)
+    sigma = pyro.sample('sigma',dist.Beta(alpha,beta).expand([n]).to_event(1))
+    a = torch.tensor(10.,device=device)
+    b = torch.tensor(1.,device=device)
+    beta_y = pyro.sample('beta_y',dist.Gamma(a,b))
+    return {'sigma':sigma}  
+
+def model_X(X,weights,train):
+    subsample_size = 10
+    a = torch.tensor(2.,device=device)
+    b = torch.tensor(2.,device=device)
+    sigma = pyro.sample('sigma',dist.Beta(a,b).expand([n]).to_event(1))
+    a = torch.tensor(25.,device=device)
+    b = torch.tensor(1.,device=device)
+    beta_x = pyro.sample('beta_x',dist.Gamma(a,b))
+    a = torch.tensor(50.,device=device)
+    total = pyro.sample('total',dist.Binomial(a,weights).expand([t]).to_event(1))
+    scaled_X = torch.round(X * total.unsqueeze(-1))
+    if train:
+        with pyro.poutine.scale(scale=1), pyro.plate('data_X',t,subsample_size=subsample_size) as ind:
+            ind = ind.to(device=device)
+            c = pyro.sample('c',dist.Poisson(beta_x*sigma).expand([subsample_size,n]).to_event(1),obs=scaled_X.index_select(0,ind))
+    else:
+        with pyro.poutine.scale(scale=1), pyro.plate('data_X',t):
+            c = pyro.sample('c',dist.Poisson(beta_x*sigma).expand([t,n]).to_event(1),obs=scaled_X)
+    return {'c':c}
+
+def guide_X(X,weights,train):
+    alpha = pyro.param('alpha',lambda:torch.tensor(np.full(n,2.0),device=device),constraint=constraints.positive)
+    beta = pyro.param('beta',lambda:torch.tensor(np.full(n,2.0),device=device),constraint=constraints.positive)
+    sigma = pyro.sample('sigma',dist.Beta(alpha,beta).expand([n]).to_event(1))
+    a = torch.tensor(25.,device=device)
+    b = torch.tensor(1.,device=device)
+    beta_x = pyro.sample('beta_x',dist.Gamma(a,b))
+    total = pyro.sample('total',dist.Binomial(50,weights).expand([t]).to_event(1))
+    return {'sigma':sigma} 
+
+def model_Z(Z,train):
+    subsample_size = 10
+    a = torch.tensor(2.,device=device)
+    b = torch.tensor(2.,device=device)
+    sigma = pyro.sample('sigma',dist.Beta(a,b).expand([n]).to_event(1))
+    high_prob = 2./3. * sigma
+    medium_prob = 1./3. * sigma
+    low_prob = 2./3. * (1-sigma)
+    not_prob = 1./3. * (1-sigma)
+    prob = torch.stack([high_prob,medium_prob,low_prob,not_prob],axis=0).T   # n * p
+    if train:
+        with pyro.poutine.scale(scale=1), pyro.plate('data_Z',p,subsample_size=subsample_size) as ind:
+            ind = ind.to(device=device)
+            pc = pyro.sample('pc',dist.Categorical(prob).expand([subsample_size,n]).to_event(1),obs=Z.index_select(0,ind))
+    else:
+        with pyro.poutine.scale(scale=1), pyro.plate('data_Z',p):
+            pc = pyro.sample('pc',dist.Categorical(prob).expand([p,n]).to_event(1),obs=Z)
+    return {'pc':pc}  
+
+def guide_Z(Z,train):
+    alpha = pyro.param('alpha',lambda:torch.tensor(np.full(n,2.0),device=device),constraint=constraints.positive)
+    beta = pyro.param('beta',lambda:torch.tensor(np.full(n,2.0),device=device),constraint=constraints.positive)
+    sigma = pyro.sample('sigma',dist.Beta(alpha,beta).expand([n]).to_event(1))
+    return {'sigma':sigma}
+
+
 def model(X,Y,Z,weights,train):
     subsample_size = 10
     a = torch.tensor(2.,device=device)
@@ -284,19 +484,19 @@ def model(X,Y,Z,weights,train):
     not_prob = 1./3. * (1-sigma)
     prob = torch.stack([high_prob,medium_prob,low_prob,not_prob],axis=0).T   # n * p
     if train:
-        with pyro.poutine.scale(scale=1/10), pyro.plate('data_X',t,subsample_size=subsample_size) as ind:
+        with pyro.poutine.scale(scale=1/875), pyro.plate('data_X',t,subsample_size=subsample_size) as ind:
             ind = ind.to(device=device)
             c = pyro.sample('c',dist.Poisson(beta_x*sigma).expand([subsample_size,n]).to_event(1),obs=scaled_X.index_select(0,ind))
-        with pyro.poutine.scale(scale=1/10000), pyro.plate('data_Y',s,subsample_size=subsample_size) as ind:
+        with pyro.poutine.scale(scale=1/5000), pyro.plate('data_Y',s,subsample_size=subsample_size) as ind:
             ind = ind.to(device=device)
             nc = pyro.sample('nc',dist.LogNormal(beta_y*sigma,0.5).expand([subsample_size,n]).to_event(1),obs=Y.index_select(0,ind))
         with pyro.poutine.scale(scale=1), pyro.plate('data_Z',p,subsample_size=subsample_size) as ind:
             ind = ind.to(device=device)
             pc = pyro.sample('pc',dist.Categorical(prob).expand([subsample_size,n]).to_event(1),obs=Z.index_select(0,ind))
     else:
-        with pyro.poutine.scale(scale=1/10), pyro.plate('data_X',t):
+        with pyro.poutine.scale(scale=1/875), pyro.plate('data_X',t):
             c = pyro.sample('c',dist.Poisson(beta_x*sigma).expand([t,n]).to_event(1),obs=scaled_X)
-        with pyro.poutine.scale(scale=1/10000), pyro.plate('data_Y',s):
+        with pyro.poutine.scale(scale=1/5000), pyro.plate('data_Y',s):
             nc = pyro.sample('nc',dist.LogNormal(beta_y*sigma,0.5).expand([s,n]).to_event(1),obs=Y)
         with pyro.poutine.scale(scale=1), pyro.plate('data_Z',p):
             pc = pyro.sample('pc',dist.Categorical(prob).expand([p,n]).to_event(1),obs=Z)
@@ -329,13 +529,13 @@ def prior_posterior_check(uid,full_result):
     fig,ax = plt.subplots()
     for item in [data,prior,posterior]:
         sns.histplot(item,ax=ax,stat='density',bins=40,alpha=0.5)
-    ax.set_xlim([-5,150])
-    ax.set_ylim([0,0.1])
-    axin = ax.inset_axes([0.5,0.5, 0.45, 0.45])
-    for item in [data,prior,posterior]:
-        sns.histplot(item,ax=axin,stat='density',bins=40,alpha=0.5)
-    axin.set_xlim(-1, 10)
-    axin.set_ylim(0, 0.5)
+    ax.set_xlim([0,20000])
+    ax.set_ylim([0,0.002])
+    # axin = ax.inset_axes([0.5,0.5, 0.45, 0.45])
+    # for item in [data,prior,posterior]:
+    #     sns.histplot(item,ax=axin,stat='density',bins=40,alpha=0.5)
+    # axin.set_xlim(-1, 10)
+    # axin.set_ylim(0, 0.5)
     plt.savefig('{}_nc.pdf'.format(uid),bbox_inches='tight')
     plt.close()
     # c
@@ -433,7 +633,6 @@ adam = Adam({'lr': 0.002,'betas':(0.95,0.999)})
 clipped_adam = ClippedAdam({'betas':(0.95,0.999)})
 elbo = Trace_ELBO()
 
-
 # trace = pyro.poutine.trace(model).get_trace(X,Y,Z,weights,True)
 # trace.compute_log_prob()  
 # print(trace.format_shapes())
@@ -444,7 +643,6 @@ elbo = Trace_ELBO()
 # with pyro.plate('samples',1000,dim=-1):
 #     samples = guide(X,Y,Z,weights,True)
 # svi_sigma = samples['sigma']  # torch.Size([1000, n])
-# print(svi_sigma.size())
 # prior_sigma = svi_sigma.data.cpu().numpy().mean(axis=0)
 
 # n_steps = 5000
@@ -485,15 +683,13 @@ elbo = Trace_ELBO()
 # diagnose('full_results.txt',output_name='pyro_full_diagnosis.pdf')
 
 
-
 '''evaluate'''
 # prior and posterior check
-# full_result = pd.read_csv('full_results.txt',sep='\t',index_col=0)
-# uid = 'ENSG00000198681'
-# prior_posterior_check(uid,full_result)
-
-
-
+full_result = pd.read_csv('full_results.txt',sep='\t',index_col=0)
+# uid = 'ENSG00000198681'  # xlim([-5,150]) ylim([0,0.1])
+uid = 'ENSG00000150991'  # xlim([0,20000]) ylim([0,0.002])
+prior_posterior_check(uid,full_result)
+sys.exit('stop')
 
 
 # 3d plot
