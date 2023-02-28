@@ -91,6 +91,8 @@ fig1, bayesTS, beta
 # plt.savefig('sigma.pdf',bbox_inches='tight')
 # plt.close()
 
+
+
 '''
 fig1B, 3d plot, in gene_protien_model
 '''
@@ -100,10 +102,11 @@ fig1B, 3d plot, in gene_protien_model
 fig2A, tumor importance, in hbm_adv_pyro.model
 '''
 
+
 '''
 fig2B, drug discovery
 '''
-# result = pd.read_csv('../gene_protein/full_results.txt',sep='\t',index_col=0)
+# result = pd.read_csv('../gene_protein/full_results_XYZ.txt',sep='\t',index_col=0)
 # result = result.sort_values(by='mean_sigma')
 # fig,ax = plt.subplots(figsize=(12,4.8))
 # ax.bar(x=np.arange(result.shape[0]),height=result['mean_sigma'].values)
@@ -115,6 +118,22 @@ fig2B, drug discovery
 # ax.set_ylabel('Inferred tumor specificity score')
 # plt.savefig('new_targets.pdf',bbox_inches='tight')
 # plt.close()
+
+
+'''visualize tumor versus normal for gene'''
+adata = ad.read_h5ad('../gene/coding.h5ad')
+from gtex_viewer import *
+gtex_viewer_configuration(adata)
+df = pd.read_csv('counts.TCGA-SKCM-steady-state.txt',sep='\t',index_col=0)
+result = pd.read_csv('../gene_protein/full_results_XYZ.txt',sep='\t',index_col=0).sort_values(by='mean_sigma')
+index_MEGA1A = result.index.tolist().index('ENSG00000198681')
+index_MS4A1 = result.index.tolist().index('ENSG00000156738')
+for i in range(index_MEGA1A+1,index_MS4A1):
+    uid = result.index.tolist()[i]
+    try:
+        gtex_visual_combine(uid,norm=True,outdir='new_drug_targets',figsize=(6.4,4.8),tumor=df,ylim=None)
+    except KeyError:
+        continue
 
 '''
 fig2C, splicing junction, using snaf

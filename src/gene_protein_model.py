@@ -188,7 +188,7 @@ def compute_concordance(uids, X,lookup,external,valid_tissue,method):
             concordance[gene] = value
     return concordance
 
-def compute_z(adata,protein,dic):
+def compute_z(adata,protein,dic_weights):
     protein = protein.loc[protein['Level'].isin(['High','Medium','Low','Not detected']),:]
     n = []
     genes = []  # 13458
@@ -211,7 +211,7 @@ def compute_z(adata,protein,dic):
         tissue2level = {p_tissue:sub_df2['Level'].values for p_tissue,sub_df2 in sub_df.groupby('Tissue')}
         # set up weight vector
         weights = {item:0.5 for item in tissue2level.keys()} 
-        for t,w in dic.items():
+        for t,w in dic_weights.items():
             try:
                 weights[t]
             except KeyError:
@@ -255,7 +255,11 @@ def compute_z(adata,protein,dic):
             n = round(v,0)
             d.append(np.repeat([i],n))
             t += n
-        d.append(np.repeat([3],total-t))
+        if total-t <= 0:
+            n_not_detected = 0
+        else:
+            n_not_detected = total-t
+        d.append(np.repeat([3],n_not_detected))
         d = np.concatenate(d)
         np.random.shuffle(d)
         return d
@@ -570,117 +574,178 @@ def prior_posterior_check(uid,full_result):
     plt.close()
 
 
+def test_and_graph_model(model,*args):
+    trace = pyro.poutine.trace(model).get_trace(*args)
+    trace.compute_log_prob()  
+    print(trace.format_shapes())
+    # pyro.render_model(model, model_args=(*args), render_distributions=True, render_params=True, filename='model.pdf')
+
+def basic_configure(raw_X,Y,Z,weights):
+    # basic configure
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    print(device)
+    X = torch.tensor(raw_X.T,device=device)
+    Y = torch.tensor(Y.T,device=device)
+    Z = torch.tensor(Z.T,device=device)
+    n = X.shape[1]
+    s = Y.shape[0]
+    t = X.shape[0]
+    p = Z.shape[0]
+    weights = torch.tensor(weights,device=device)
+    return device,X,Y,Z,n,s,t,p,weights
+
+def train_and_infer(model,guide,*args):
+
+    adam = Adam({'lr': 0.002,'betas':(0.95,0.999)}) 
+    clipped_adam = ClippedAdam({'betas':(0.95,0.999)})
+    elbo = Trace_ELBO()
+    # train
+    with pyro.plate('samples',1000,dim=-1):
+        samples = guide(*args)
+    svi_sigma = samples['sigma']  # torch.Size([1000, n])
+    prior_sigma = svi_sigma.data.cpu().numpy().mean(axis=0)
+
+    n_steps = 5000
+    pyro.clear_param_store()
+    svi = SVI(model, guide, adam, loss=Trace_ELBO())
+    losses = []
+    for step in tqdm(range(n_steps),total=n_steps):  
+        loss = svi.step(*args)
+        losses.append(loss)
+    plt.figure(figsize=(5, 2))
+    plt.plot(losses)
+    plt.xlabel("SVI step")
+    plt.ylabel("ELBO loss")
+    plt.savefig('elbo_loss.pdf',bbox_inches='tight')
+    plt.close()
+
+    with pyro.plate('samples',1000,dim=-1):
+        samples = guide(*args)
+    svi_sigma = samples['sigma']  # torch.Size([1000, n])
+    sigma = svi_sigma.data.cpu().numpy().mean(axis=0)
+    alpha = pyro.param('alpha').data.cpu().numpy()
+    beta = pyro.param('beta').data.cpu().numpy()
+    df = pd.DataFrame(index=uids,data={'mean_sigma':sigma,'alpha':alpha,'beta':beta,'prior_sigma':prior_sigma})
+    with open('X.p','rb') as f:
+        X = pickle.load(f)
+    with open('Y.p','rb') as f:
+        Y = pickle.load(f)
+    with open('Z.p','rb') as f:
+        Z = pickle.load(f)
+    Y_mean = Y.mean(axis=1)
+    X_mean = X.mean(axis=1)
+    Z_mean = Z.mean(axis=1)
+    df['Y_mean'] = Y_mean
+    df['X_mean'] = X_mean
+    df['Z_mean'] = Z_mean
+    df.to_csv('full_results.txt',sep='\t')
+    diagnose('full_results.txt',output_name='pyro_full_diagnosis.pdf')
+    return svi_sigma
+
+def generate_inputs(adata,protein,dic):
+    Z,adata,uids = compute_z(adata,protein,dic)  # 13306 * 89
+    Y = compute_y(adata,uids)  # 13306 * 3644
+    Y = np.where(Y==0,1e-5,Y)
+    X = compute_scaled_x(adata,uids)  # 13306 * 63
+    thresholded_Y = np.empty_like(Y,dtype=np.float32)
+    cond_Y = np.empty_like(Y,dtype=bool)
+    ths = []
+    for i in tqdm(range(Y.shape[0]),total=Y.shape[0]):
+        thresholded_Y[i,:], cond_Y[i,:], th = threshold(Y[i,:],'hardcode',v=0.8)
+        ths.append(th)
+    new_adata = get_thresholded_adata(adata,cond_Y)
+    raw_X = compute_x(new_adata,uids)
+    n = X.shape[0]
+    s = Y.shape[1]
+    t = X.shape[1]
+    weights = weighting(adata,dic,t)
+    with open('uids.p','wb') as f:
+        pickle.dump(uids,f)
+    with open('weights.p','wb') as f:
+        pickle.dump(weights,f)
+    with open('Z.p','wb') as f:
+        pickle.dump(Z,f)
+    with open('Y.p','wb') as f:
+        pickle.dump(Y,f)
+    with open('X.p','wb') as f:
+        pickle.dump(X,f)
+    with open('raw_X.p','wb') as f:
+        pickle.dump(raw_X, f)   
+    return X,Y,Z,raw_X,weights,uids
+
+def load_pre_generated_inputs():
+    with open('uids.p','rb') as f:
+        uids = pickle.load(f)
+    with open('weights.p','rb') as f:
+        weights = pickle.load(f)
+    with open('Z.p','rb') as f:
+        Z = pickle.load(f)
+    with open('Y.p','rb') as f:
+        Y = pickle.load(f)
+    with open('X.p','rb') as f:
+        X = pickle.load(f)
+    with open('raw_X.p','rb') as f:
+        raw_X = pickle.load(f)
+    return X,Y,Z,raw_X,weights,uids
 
 '''main program starts'''
 
 adata = ad.read_h5ad('../gene/coding.h5ad')
 protein = pd.read_csv('normal_tissue.tsv',sep='\t')
-dic = {}
-# Z,adata,uids = compute_z(adata,protein,dic)  # 13306 * 89
-# Y = compute_y(adata,uids)  # 13306 * 3644
-# Y = np.where(Y==0,1e-5,Y)
-# X = compute_scaled_x(adata,uids)  # 13306 * 63
-# thresholded_Y = np.empty_like(Y,dtype=np.float32)
-# cond_Y = np.empty_like(Y,dtype=bool)
-# ths = []
-# for i in tqdm(range(Y.shape[0]),total=Y.shape[0]):
-#     thresholded_Y[i,:], cond_Y[i,:], th = threshold(Y[i,:],'hardcode',v=0.8)
-#     ths.append(th)
-# new_adata = get_thresholded_adata(adata,cond_Y)
-# raw_X = compute_x(new_adata,uids)
-# n = X.shape[0]
-# s = Y.shape[1]
-# t = X.shape[1]
-t = 63
-weights = weighting(adata,dic,t)
-# with open('uids.p','wb') as f:
-#     pickle.dump(uids,f)
-# with open('Z.p','wb') as f:
-#     pickle.dump(Z,f)
-# with open('Y.p','wb') as f:
-#     pickle.dump(Y,f)
-# with open('X.p','wb') as f:
-#     pickle.dump(X,f)
-# with open('raw_X.p','wb') as f:
-#     pickle.dump(raw_X, f)
-
-with open('uids.p','rb') as f:
-    uids = pickle.load(f)
-with open('Z.p','rb') as f:
-    Z = pickle.load(f)
-with open('Y.p','rb') as f:
-    Y = pickle.load(f)
-with open('X.p','rb') as f:
-    X = pickle.load(f)
-with open('raw_X.p','rb') as f:
-    raw_X = pickle.load(f)
+# pd.Series(data=protein['Tissue'].dropna().unique()).to_csv('protein_tissue.txt',sep='\t')
+# dic = {}
+# X,Y,Z,raw_X,weights,uids = generate_inputs(adata,protein,dic)
+# device,X,Y,Z,n,s,t,p,weights = basic_configure(raw_X,Y,Z,weights)
+# test_and_graph_model(model,X,Y,Z,weights,True)
+# svi_sigma = train_and_infer(model,guide,X,Y,Z,weights,True)
 
 
+'''adjust tissue importance'''
+# testing CTAG1B, downweigh Testis
+# infered_sigmas = {}
+# uid = 'ENSG00000184033'
+# for w in [0.5,0.4,0.3,0.2,0.1]:
+#     print(w)
+#     dic = {'Testis':w,'testis':w}
+#     X,Y,Z,raw_X,weights,uids = generate_inputs(adata,protein,dic)
+#     device,X,Y,Z,n,s,t,p,weights = basic_configure(raw_X,Y,Z,weights)
+#     svi_sigma = train_and_infer(model,guide,X,Y,Z,weights,True)
+#     index = uids.index(uid)
+#     sigma = svi_sigma[:,index].data.cpu().numpy()
+#     infered_sigmas[w] = sigma
+# df = pd.DataFrame(infered_sigmas)
+# df.to_csv('CTAG1B_Testis.txt',sep='\t')
+# df = pd.read_csv('CTAG1B_Testis.txt',sep='\t',index_col=0)
+# df.drop(columns=['0.1'],inplace=True)
+# sns.barplot(df)
+# plt.savefig('CTAG1B_Testis.pdf',bbox_inches='tight')
+# plt.close()
 
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-print(device)
-X = torch.tensor(X.T,device=device)
-Y = torch.tensor(Y.T,device=device)
-Z = torch.tensor(Z.T,device=device)
-n = X.shape[1]
-s = Y.shape[0]
-t = X.shape[0]
-p = Z.shape[0]
-weights = torch.tensor(weights,device=device)
-
-
-adam = Adam({'lr': 0.002,'betas':(0.95,0.999)}) 
-clipped_adam = ClippedAdam({'betas':(0.95,0.999)})
-elbo = Trace_ELBO()
-
-# trace = pyro.poutine.trace(model).get_trace(X,Y,Z,weights,True)
-# trace.compute_log_prob()  
-# print(trace.format_shapes())
-# # pyro.render_model(model, model_args=(X,Y,Z,weights), render_distributions=True, render_params=True, filename='model.pdf')
-
-
-# # train
-# with pyro.plate('samples',1000,dim=-1):
-#     samples = guide(X,Y,Z,weights,True)
-# svi_sigma = samples['sigma']  # torch.Size([1000, n])
-# prior_sigma = svi_sigma.data.cpu().numpy().mean(axis=0)
-
-# n_steps = 5000
-# pyro.clear_param_store()
-# svi = SVI(model, guide, adam, loss=Trace_ELBO())
-# losses = []
-# for step in tqdm(range(n_steps),total=n_steps):  
-#     loss = svi.step(X,Y,Z,weights,True)
-#     losses.append(loss)
-# plt.figure(figsize=(5, 2))
-# plt.plot(losses)
-# plt.xlabel("SVI step")
-# plt.ylabel("ELBO loss")
-# plt.savefig('elbo_loss.pdf',bbox_inches='tight')
+# testing MS4A1, downweigh Testis
+# infered_sigmas = {}
+# uid = 'ENSG00000156738'
+# choices = [
+#     {},   # default
+#     {'Spleen':0.1, 'Whole Blood':0.1, 'spleen':0.1, 'bone marrow':0.1},   # downweight immune tissue
+#     {'Spleen':0.1, 'Whole Blood':0.1, 'spleen':0.1, 'bone marrow':0.1, 'appendix':0.1, 'tonsil':0.1} # further downweight expendable tissues
+# ]
+# for dic,anno in zip(choices,['default','immune tissue','expendable tissues']):
+#     X,Y,Z,raw_X,weights,uids = generate_inputs(adata,protein,dic)
+#     device,X,Y,Z,n,s,t,p,weights = basic_configure(raw_X,Y,Z,weights)
+#     svi_sigma = train_and_infer(model,guide,X,Y,Z,weights,True)
+#     index = uids.index(uid)
+#     sigma = svi_sigma[:,index].data.cpu().numpy()
+#     infered_sigmas[anno] = sigma
+# df = pd.DataFrame(infered_sigmas)
+# df.to_csv('MS4A1_tissue.txt',sep='\t')
+# sns.barplot(df)
+# plt.savefig('MS4A1_tissue.pdf',bbox_inches='tight')
 # plt.close()
 
 
-# with pyro.plate('samples',1000,dim=-1):
-#     samples = guide(X,Y,Z,weights,True)
-# svi_sigma = samples['sigma']  # torch.Size([1000, n])
-# sigma = svi_sigma.data.cpu().numpy().mean(axis=0)
-# alpha = pyro.param('alpha').data.cpu().numpy()
-# beta = pyro.param('beta').data.cpu().numpy()
-# df = pd.DataFrame(index=uids,data={'mean_sigma':sigma,'alpha':alpha,'beta':beta,'prior_sigma':prior_sigma})
-# with open('X.p','rb') as f:
-#     X = pickle.load(f)
-# with open('Y.p','rb') as f:
-#     Y = pickle.load(f)
-# with open('Z.p','rb') as f:
-#     Z = pickle.load(f)
-# Y_mean = Y.mean(axis=1)
-# X_mean = X.mean(axis=1)
-# Z_mean = Z.mean(axis=1)
-# df['Y_mean'] = Y_mean
-# df['X_mean'] = X_mean
-# df['Z_mean'] = Z_mean
-# df.to_csv('full_results.txt',sep='\t')
-# diagnose('full_results.txt',output_name='pyro_full_diagnosis.pdf')
+
+
+
 
 
 '''evaluate'''
