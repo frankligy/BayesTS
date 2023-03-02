@@ -198,6 +198,13 @@ def gtex_visual_combine(uid,norm=False,outdir='.',figsize=(6.4,4.8),tumor=None,y
     y_list = []
     v_delimiter = [0]
     xticklabel = []
+    total_number_tissues = len(sorted_sub_df_list)
+    if tumor is None:
+        c_list = np.concatenate([np.array(['g']*sub_df.shape[0]) for sub_df in sorted_sub_df_list]).tolist()
+    else:
+        c_list_1 = np.concatenate([np.array(['g']*sub_df.shape[0]) for sub_df in sorted_sub_df_list[:-1]]).tolist()
+        c_list_2 = ['r'] * sorted_sub_df_list[-1].shape[0]
+        c_list = c_list_1 + c_list_2
     for i,sub_df in enumerate(sorted_sub_df_list):
         sub_df.sort_values(by='value',inplace=True)
         n = sub_df.shape[0]
@@ -209,7 +216,8 @@ def gtex_visual_combine(uid,norm=False,outdir='.',figsize=(6.4,4.8),tumor=None,y
             if j == n-1:
                 v_delimiter.append(x)
                 x += 1
-    ax.plot(x_list,y_list,marker='o',linestyle='',markerfacecolor='r',markeredgewidth=0.1,color='k',markersize=2)
+    # ax.plot(x_list,y_list,marker='o',linestyle='',markerfacecolor='r',markeredgewidth=0.1,color='k',markersize=2)
+    ax.scatter(x_list,y_list,s=2,c=c_list,marker='o')
     for v in v_delimiter[1:-1]:
         ax.axvline(v,linestyle='--',linewidth=0.5)
     xtick = [(v + v_delimiter[i+1])/2 for i,v in enumerate(v_delimiter[:-1])]

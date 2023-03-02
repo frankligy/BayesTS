@@ -35,6 +35,27 @@ mpl.rcParams['font.family'] = 'Arial'
 adata = ad.read_h5ad('../gene/coding.h5ad')
 uids = adata.obs_names.tolist()
 
+
+# # derive some statistics
+# var = adata.var
+# tcga_var = var.loc[[True if 'TCGA' in item else False for item in var.index],:]
+# gtex_var = var.loc[[True if 'TCGA' not in item else False for item in var.index],:]
+# print(tcga_var,gtex_var)
+# gtex_var['tissue'].value_counts().to_csv('gtex_unique_tissue_counts.txt',sep='\t')
+# sys.exit('stop')
+
+
+# # whether expendable tissues reduction is significant
+# df = pd.read_csv('../gene_protein/MS4A1_tissue.txt',sep='\t',index_col=0)
+# from scipy.stats import mannwhitneyu,ttest_ind
+# print(mannwhitneyu(df['default'].values,df['immune tissue'].values))
+
+# df = pd.read_csv('../gene_protein/CTAG1B_Testis.txt',sep='\t',index_col=0)
+# from scipy.stats import mannwhitneyu,ttest_ind
+# print(mannwhitneyu(df['0.5'].values,df['0.2'].values))
+
+
+
 '''
 fig1. visualize the Y, the cpm of count
 using these three examples:
@@ -119,19 +140,19 @@ fig2B, drug discovery
 # plt.savefig('new_targets.pdf',bbox_inches='tight')
 # plt.close()
 
-result = pd.read_csv('../dev/full_results_XY.txt',sep='\t',index_col=0)
-result = result.sort_values(by='mean_sigma')
-fig,ax = plt.subplots(figsize=(12,4.8))
-ax.bar(x=np.arange(result.shape[0]),height=result['mean_sigma'].values)
-index_MEGA1A = result.index.tolist().index('ENSG00000001461:E6.1-E7.1_24445189')
-index_MS4A1 = result.index.tolist().index('ENSG00000149582:E6.2-E7.1')
-ax.axvline(x=index_MEGA1A,c='r',linestyle='--')
-ax.axvline(x=index_MS4A1,c='r',linestyle='--')
-ax.set_xlabel('Targets ranked by tumor specificity')
-ax.set_ylabel('Inferred tumor specificity score')
-plt.savefig('new_targets_splicing.pdf',bbox_inches='tight')
-plt.close()
-sys.exit('stop')
+# result = pd.read_csv('../dev/full_results_XY.txt',sep='\t',index_col=0)
+# result = result.sort_values(by='mean_sigma')
+# fig,ax = plt.subplots(figsize=(12,4.8))
+# ax.bar(x=np.arange(result.shape[0]),height=result['mean_sigma'].values)
+# index_MEGA1A = result.index.tolist().index('ENSG00000001461:E6.1-E7.1_24445189')
+# index_MS4A1 = result.index.tolist().index('ENSG00000149582:E6.2-E7.1')
+# ax.axvline(x=index_MEGA1A,c='r',linestyle='--')
+# ax.axvline(x=index_MS4A1,c='r',linestyle='--')
+# ax.set_xlabel('Targets ranked by tumor specificity')
+# ax.set_ylabel('Inferred tumor specificity score')
+# plt.savefig('new_targets_splicing.pdf',bbox_inches='tight')
+# plt.close()
+
 
 
 '''visualize tumor versus normal for gene'''
@@ -139,15 +160,30 @@ adata = ad.read_h5ad('../gene/coding.h5ad')
 from gtex_viewer import *
 gtex_viewer_configuration(adata)
 df = pd.read_csv('counts.TCGA-SKCM-steady-state.txt',sep='\t',index_col=0)
-result = pd.read_csv('../gene_protein/full_results_XYZ.txt',sep='\t',index_col=0).sort_values(by='mean_sigma')
-index_MEGA1A = result.index.tolist().index('ENSG00000198681')
-index_MS4A1 = result.index.tolist().index('ENSG00000156738')
-for i in range(index_MEGA1A+1,index_MS4A1):
-    uid = result.index.tolist()[i]
-    try:
-        gtex_visual_combine(uid,norm=True,outdir='new_drug_targets',figsize=(6.4,4.8),tumor=df,ylim=None)
-    except KeyError:
-        continue
+# result = pd.read_csv('../gene_protein/full_results_XYZ.txt',sep='\t',index_col=0).sort_values(by='mean_sigma')
+# index_MEGA1A = result.index.tolist().index('ENSG00000198681')
+# index_MS4A1 = result.index.tolist().index('ENSG00000156738')
+# for i in range(index_MEGA1A+1,index_MS4A1):
+#     uid = result.index.tolist()[i]
+#     try:
+#         gtex_visual_combine(uid,norm=True,outdir='new_drug_targets',figsize=(6.4,4.8),tumor=df,ylim=None)
+#     except KeyError:
+#         continue
+
+uids = [
+    'ENSG00000126856',
+    'ENSG00000183668',
+    'ENSG00000243130',
+    'ENSG00000170848',
+    'ENSG00000156269',
+    'ENSG00000166049',
+    'ENSG00000187772',
+    'ENSG00000268009'
+]
+
+for uid in uids:
+    gtex_visual_combine(uid,norm=True,outdir='new_drug_targets_visual_final',figsize=(6.4,4.8),tumor=df,ylim=None)
+sys.exit('stop')
 
 '''
 fig2C, splicing junction, using snaf
