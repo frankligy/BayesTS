@@ -21,7 +21,7 @@ I develop BayesTS in Linux System (to utilize gpu) with Python 3.7, but since th
 
 I prefer using a conda environment and using prefix to install it to your current directory (you can modify the `-p`). `mamba` should be faster than `conda`.
 
- ```
+ ```bashs
 # env
 mamba env create -f pytorch_pyro_mamba_env_linux_37.yml -p ./BayesTS_env
 
@@ -43,7 +43,7 @@ Testis      0.1
 
 You need to download RNA or Protein data from [this synapse folder](https://www.synapse.org/#!Synapse:syn51170082/files/).
 
- ```
+ ```bash
 # help information
 python BayesTS.py --help
 
