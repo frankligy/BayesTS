@@ -643,6 +643,50 @@ def train_and_infer(model,guide,*args):
     diagnose('full_results.txt',output_name='pyro_full_diagnosis.pdf')
     return svi_sigma
 
+def train_and_infer_XY(model,guide,*args):
+
+    adam = Adam({'lr': 0.002,'betas':(0.95,0.999)}) 
+    clipped_adam = ClippedAdam({'betas':(0.95,0.999)})
+    elbo = Trace_ELBO()
+    # train
+    with pyro.plate('samples',1000,dim=-1):
+        samples = guide(*args)
+    svi_sigma = samples['sigma']  # torch.Size([1000, n])
+    prior_sigma = svi_sigma.data.cpu().numpy().mean(axis=0)
+
+    n_steps = 5000
+    pyro.clear_param_store()
+    svi = SVI(model, guide, adam, loss=Trace_ELBO())
+    losses = []
+    for step in tqdm(range(n_steps),total=n_steps):  
+        loss = svi.step(*args)
+        losses.append(loss)
+    plt.figure(figsize=(5, 2))
+    plt.plot(losses)
+    plt.xlabel("SVI step")
+    plt.ylabel("ELBO loss")
+    plt.savefig('elbo_loss.pdf',bbox_inches='tight')
+    plt.close()
+
+    with pyro.plate('samples',1000,dim=-1):
+        samples = guide(*args)
+    svi_sigma = samples['sigma']  # torch.Size([1000, n])
+    sigma = svi_sigma.data.cpu().numpy().mean(axis=0)
+    alpha = pyro.param('alpha').data.cpu().numpy()
+    beta = pyro.param('beta').data.cpu().numpy()
+    df = pd.DataFrame(index=uids,data={'mean_sigma':sigma,'alpha':alpha,'beta':beta,'prior_sigma':prior_sigma})
+    with open('X.p','rb') as f:
+        X = pickle.load(f)
+    with open('Y.p','rb') as f:
+        Y = pickle.load(f)
+    Y_mean = Y.mean(axis=1)
+    X_mean = X.mean(axis=1)
+    df['Y_mean'] = Y_mean
+    df['X_mean'] = X_mean
+    df.to_csv('full_results.txt',sep='\t')
+    diagnose('full_results.txt',output_name='pyro_full_diagnosis.pdf')
+    return svi_sigma
+
 def generate_inputs(adata,protein,dic):
     Z,adata,uids = compute_z(adata,protein,dic)  # 13306 * 89
     Y = compute_y(adata,uids)  # 13306 * 3644
@@ -735,15 +779,18 @@ def load_pre_generated_inputs():
 '''main program starts'''
 
 def main(args):
+
     adata = ad.read_h5ad(args.input)
     dic = pd.read_csv(args.weight,sep='\t',index_col=0).to_dict()
+    global n,s,t,device,uids
     if args.mode == 'XY':
         X,Y,raw_X,weights,uids = generate_input_XY(adata,dic)
         device,X,Y,n,s,t,weights = basic_configure_XY(raw_X,Y,weights,uids)
-        svi_sigma = train_and_infer(model_XY,guide_XY,X,Y,weights,True)
+        svi_sigma = train_and_infer_XY(model_X_Y,guide_X_Y,X,Y,weights,True)
     elif args.mode == 'XYZ':
+        global p
         protein = pd.read_csv(args.protein,sep='\t')
-        X,Y,Z,raw_X,weights,uids = generate_input(adata,protein,dic)
+        X,Y,Z,raw_X,weights,uids = generate_inputs(adata,protein,dic)
         device,X,Y,Z,n,s,t,p,weights = basic_configure(raw_X,Y,Z,weights)
         svi_sigma = train_and_infer(model,guide,X,Y,Z,weights,True)
 
