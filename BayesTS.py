@@ -23,6 +23,7 @@ from sklearn.mixture import GaussianMixture
 from scipy.stats import pearsonr, spearmanr
 import numpy.ma as ma
 from sklearn.metrics import precision_recall_curve,auc,roc_curve,accuracy_score
+import argparse
 
 import matplotlib as mpl
 mpl.rcParams['pdf.fonttype'] = 42
@@ -729,15 +730,35 @@ def load_pre_generated_inputs():
         raw_X = pickle.load(f)
     return X,Y,Z,raw_X,weights,uids
 
+
+
 '''main program starts'''
 
-adata = ad.read_h5ad('../bayesian/combined_normal_count.h5ad')
-dic = {}
-X,Y,raw_X,weights,uids = generate_input_XY(adata,dic)
-print(X.shape,Y.shape,raw_X.shape,len(weights),len(uids))
-device,X,Y,n,s,t,weights = basic_configure_XY(raw_X,Y,weights)
-test_and_graph_model(model_XY,X,Y,weights,True)
-svi_sigma = train_and_infer(model_XY,guide_XY,X,Y,weights,True)
+def main(args):
+    adata = ad.read_h5ad(args.input)
+    dic = pd.read_csv(args.weight,sep='\t',index_col=0).to_dict()
+    if args.mode == 'XY':
+        X,Y,raw_X,weights,uids = generate_input_XY(adata,dic)
+        device,X,Y,n,s,t,weights = basic_configure_XY(raw_X,Y,weights,uids)
+        svi_sigma = train_and_infer(model_XY,guide_XY,X,Y,weights,True)
+    elif args.mode == 'XYZ':
+        protein = pd.read_csv(args.protein,sep='\t')
+        X,Y,Z,raw_X,weights,uids = generate_input(adata,protein,dic)
+        device,X,Y,Z,n,s,t,p,weights = basic_configure(raw_X,Y,Z,weights)
+        svi_sigma = train_and_infer(model,guide,X,Y,Z,weights,True)
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='Run BayesTS to retrain')
+    parser.add_argument('--input',type=str,default='',help='path to the h5ad file downloaded from Synapse')
+    parser.add_argument('--weight',type=str,default='',help='path to a txt file with tissue and weights that you want to change')
+    parser.add_argument('--mode',type=str,default='XYZ',help='XYZ use full model, XY use only RNA model')
+    parser.add_argument('--protein',type=str,default='',help='path to the protein info downloaded from Synapse')
+    args = parser.parse_args()
+    main(args)
+
+
+
 
 
 

@@ -1,4 +1,4 @@
-name: /data/salomonis2/LabFiles/Frank-Li/neoantigen/revision/ts/bayesian/pytorch_pyro_mamba_env
+name: BayesTS_env
 channels:
   - pytorch
   - nvidia
@@ -210,4 +210,4 @@ dependencies:
     - anndata==0.8.0
     - importlib-metadata==6.0.0
     - zipp==3.13.0
-prefix: /data/salomonis2/LabFiles/Frank-Li/neoantigen/revision/ts/bayesian/pytorch_pyro_mamba_env
+

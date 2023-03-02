@@ -7,6 +7,8 @@ Quantifying Tumor Specificity using Bayesian probabilistic modeling for drug tar
 
  - Retrain the BayesTS model to adjust tissue importance see [here](https://github.com/frankligy/BayesTS#adjust-tissue-importance).
 
+ Please feel free to contact me if I can help clarify anything, contact is at the bottom.
+
 
 
  # Overview
