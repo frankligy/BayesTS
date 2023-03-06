@@ -66,7 +66,7 @@ All outputs will be saved in current directory
 
 ## Citation
 
-Li et al. Quantifying tumor specificity using Bayesian probabilistic modeling for drug target discovery and prioritization. BioRxiv 2023 https://doi.org/10.1101/2023.03.03.530994
+Li, Guangyuan, Anukana Bhattacharjee, and Nathan Salomonis. 2023. “Quantifying Tumor Specificity Using Bayesian Probabilistic Modeling for Drug Target Discovery and Prioritization.” bioRxiv. https://doi.org/10.1101/2023.03.03.530994.
 
 ## Contact
 
