@@ -63,6 +63,11 @@ python BayesTS.py --input "./coding.h5ad"  # download gene count from synapse
 
 All outputs will be saved in current directory
 
+
+## Citation
+
+Li et al. Quantifying tumor specificity using Bayesian probabilistic modeling for drug target discovery and prioritization. BioRxiv 2023 https://doi.org/10.1101/2023.03.03.530994
+
 ## Contact
 
 Guangyuan(Frank) Li
