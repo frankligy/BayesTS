@@ -3,8 +3,6 @@ Quantifying Tumor Specificity using Bayesian probabilistic modeling for drug tar
 
  - Access BayesTS database for the tumor specifcity of 13,306 protein coding genes with both RNA and protein information [here](./database/full_results_XYZ.txt).
 
- - Access BayesTS database for the tumor specifcity of >100K melanoma splicing junctions consdiering both RNA and tissue distribution [here](./database/full_results_XY_splicing.txt).
-
  - Retrain the BayesTS model to adjust tissue importance see [here](https://github.com/frankligy/BayesTS#adjust-tissue-importance).
 
  Please feel free to contact me if I can help clarify anything, contact is at the bottom.
