@@ -5,6 +5,8 @@ Quantifying Tumor Specificity using Bayesian probabilistic modeling for drug tar
 
  - Retrain the BayesTS model to adjust tissue importance see [here](https://github.com/frankligy/BayesTS#adjust-tissue-importance).
 
+ - Apply BayesTS to [SNAF](https://github.com/frankligy/SNAF) splicing junctions see [here](https://github.com/frankligy/BayesTS#interface-with-snaf)
+
  Please feel free to contact me if I can help clarify anything, contact is at the bottom.
 
 
@@ -43,7 +45,7 @@ Testis      0.1
 
 You need to download RNA or Protein data from [this synapse folder](https://www.synapse.org/#!Synapse:syn51170082/files/).
 
- ```bash
+```bash
 # help information
 python BayesTS.py --help
 
@@ -57,9 +59,20 @@ python BayesTS.py --input "./coding.h5ad"  # download gene count from synapse
 python BayesTS.py --input "./coding.h5ad"  # download gene count from synapse
                    --weight "./weights.txt"   # see above
                    --mode "XY"                   
- ```
+```
 
 All outputs will be saved in current directory
+
+
+## Interface with SNAF
+
+In SNAF, you are able to get a h5ad file with all the splicing junctions you'd like to query, let's say the file name is `junction.h5ad`
+
+```bash
+python BayesTS.py --input "junction.h5ad"
+                  --weight "weights.txt"
+                  --mode "XY"
+```
 
 
 ## Citation
