@@ -61,7 +61,6 @@ for pair in tqdm(pairs,total=len(pairs)):
 adata_final = ad.concat(adata_list,axis=0,join='inner',merge='first')
 adata_final.X = csr_matrix(adata_final.X)
 adata_final.write('adata_final.h5ad')
-sys.exit('stop')
 
 ## build pair version of protein input
 dic = {}
