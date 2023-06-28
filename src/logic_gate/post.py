@@ -80,6 +80,15 @@ result['delta2'] = col4
 from gtex_viewer import *
 adata_single = ad.read_h5ad('../coding.h5ad')
 adata_double = ad.read_h5ad('adata_final.h5ad')
+
+# # show PMEL ENSG00000185664
+# gtex_viewer_configuration(adata_single)
+# uid = 'ENSG00000185664'
+# df = pd.read_csv('../counts.TCGA-SKCM-steady-state.txt',sep='\t',index_col=0)
+# gtex_visual_combine(uid=uid,norm=False,outdir='snaf_inspection',tumor=df,group_by_tissue=False)
+# gtex_visual_combine(uid=uid,norm=True,outdir='snaf_inspection',tumor=df,group_by_tissue=False)
+
+
 def visualize_pair(uids,outdir):
     ylim = (0,30)
     figsize = (6.4,1.5)
@@ -97,21 +106,18 @@ def visualize_pair(uids,outdir):
 #     visualize_pair(uids=item,outdir='inspection/{}'.format(item))
 
 # heatmap
+reversed_result = result.copy()
+reversed_result['gene_symbols'] = [','.join([item.split(',')[1],item.split(',')[0]]) for item in result['gene_symbols']]
+result = pd.concat([result,reversed_result],axis=0)
+
 col1 = [item.split(',')[0] for item in result['gene_symbols']]
 col2 = [item.split(',')[1] for item in result['gene_symbols']]
 result['gene1'] = col1
 result['gene2'] = col2
 result_new = result.loc[:,['mean_sigma','gene1','gene2']]
 
-# ERBB3 is always on the gene2 slot, so add it back to gene 1 as well
-result_new_miss = result_new.loc[result_new['gene2']=='ERBB3',:]
-result_new_miss_new = result_new_miss.copy()
-result_new_miss_new['gene1'] = result_new_miss['gene2']
-result_new_miss_new['gene2'] =  result_new_miss['gene1']
-
-result_new = pd.concat([result_new,result_new_miss_new],axis=0)
-
-df = result_new.groupby(by=['gene1','gene2'])['mean_sigma'].mean().unstack(fill_value=0)
+df = result_new.groupby(by=['gene1','gene2'])['mean_sigma'].mean().unstack(fill_value=1)
+df.to_csv('check_old_df.txt',sep='\t')
 
 u_indices = np.triu_indices(df.shape[0],k=1)
 u_values = df.values[u_indices]
@@ -126,6 +132,7 @@ tmp = df.values.T
 tmp[new_u_indices] = df.values[new_u_indices]
 new = tmp.T
 new_df = pd.DataFrame(data=new,index=df.index,columns=df.columns)
+new_df.to_csv('check_new_df.txt',sep='\t')
 
 tmp = []
 for ensg,sigma in gene2sigma.items():
@@ -138,11 +145,12 @@ tmp.sort(key=lambda x:x[1])
 sorted_gene = list(list(zip(*tmp))[0])
 new_df = new_df.loc[sorted_gene,sorted_gene]
 
+
 fig,ax = plt.subplots()
 sns.heatmap(new_df,mask=np.triu(new_df.values,k=0),cmap='viridis',xticklabels=1,yticklabels=1,ax=ax)
 ax.set_xticklabels(ax.get_xticklabels(), fontsize=1)
 ax.set_yticklabels(ax.get_yticklabels(), fontsize=1)
-plt.savefig('heatmap_lower.pdf',bbox_inches='tight')
+plt.savefig('heatmap_lower_new.pdf',bbox_inches='tight')
 plt.close()
 
 
