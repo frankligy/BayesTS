@@ -132,11 +132,99 @@ ensg2symbol = pd.Series(index=final_target['ensg'].tolist(),data=final_target['t
 # result.to_csv('full_results_XY_pair_post.txt',sep='\t')
 
 # generate samples for other three metrics
+N = 100
+
+### 1. differential lfc
+data = pd.read_csv('logFC_gene_convert.csv',index_col=0)
+col = []
+for a,b in zip(data.index,data['name']):
+    if a == b:
+        col.append(True)
+    else:
+        col.append(False)
+data = data.loc[col,:]    # 24458, this contains 85 targets, so we are good
+dic = data['converted_alias'].to_dict()
+# data.to_csv('logFC_gene_convert_confident.csv')
+
+lfc = pd.read_csv('logFC.csv',index_col=0)
+lfc['ensg'] = [dic.get(item,None) for item in lfc['Gene']]
+lfc_need = lfc.loc[lfc['ensg'].isin(singles),:]
+ensg2lfc = pd.Series(index=lfc_need['ensg'].tolist(),data=lfc_need['Log Fold Change'].tolist()).to_dict()
+
+A = np.empty((len(singles),N),dtype=np.float32)
+from scipy.stats import norm
+for i,lfc in enumerate(ensg2lfc.values()):
+    A[i,:] = norm.rvs(loc=lfc,scale=1,size=N)
+
+# sns.histplot(A[34,:],bins=20)
+# plt.savefig('check.pdf',bbox_inches='tight');plt.close()
+# print(pd.Series(ensg2lfc).iloc[34])
+
+A_df = pd.DataFrame(data=A,index=list(ensg2lfc.keys()),columns=['sample_{}'.format(i+1) for i in range(100)])
+# A_df.to_csv('A_single.txt',sep='\t')
+
+df_list = []
+for pair in tqdm(pairs,total=len(pairs)):
+    no1, no2 = pair
+    df_tmp = A_df.loc[[no1,no2],:]
+    df_pair = pd.Series(name='{},{}'.format(no1,no2),data=df_tmp.values.mean(axis=0))
+    df_list.append(df_pair)
+final_df = pd.concat(df_list,axis=1).T
+
+lfc = pd.read_csv('logFC.csv',index_col=0)
+all_lfc = lfc['Log Fold Change'].values
+ps = norm.fit(data=all_lfc)   # (0.17019986399218104, 1.3574141344839383), in standard N~(0,1), 3 can capture over 99% variation, now 3*1.35=4.07
 
 
 
-# build and train the model
+### 2. dependency, i have confirmed the 49 cell line models included are all GB releted
+dep = pd.read_csv('dependentGene.csv',index_col=0).iloc[:,:-2]
+dep['ensg'] = [dic.get(item,None) for item in dep['gene']]
+dep_need = dep.loc[dep['ensg'].isin(singles),:]
+dep_need.set_index(keys=['ensg'],inplace=True)
+dep_need.drop(columns=['gene'],inplace=True)
+
+def median_impute(x):
+    med = np.ma.median(np.ma.masked_invalid(x.values))
+    result = np.nan_to_num(x.values,nan=med)
+    return result
+
+dep_need_imputed = dep_need.apply(func=median_impute,axis=1,result_type='expand')
+dep_need_imputed.columns = dep_need.columns
+
+singles = dep_need_imputed.index.tolist()
+pairs = list(combinations(singles,2))  # 3570 -> 3403
+
+df_list = []
+for pair in tqdm(pairs,total=len(pairs)):
+    no1, no2 = pair
+    df_tmp = dep_need_imputed.loc[[no1,no2],:]
+    df_pair = pd.Series(name='{},{}'.format(no1,no2),data=df_tmp.values.mean(axis=0))
+    df_list.append(df_pair)
+final_df_dep = pd.concat(df_list,axis=1).T
 
 
+### 3. heterogeneity
+var = pd.read_csv('var.txt',sep='\t',index_col=0)
+var['ensg'] = [dic.get(item,None) for item in var.index]
+var_need = var.loc[var['ensg'].isin(singles),:]
+var_dic = pd.Series(index=var_need['ensg'].tolist(),data=var_need['dispersions_norm'].tolist()).to_dict()
 
-# visualizing and post-inspection
+singles = list(var_dic.keys())
+pairs = list(combinations(singles,2))  # 3570 -> 3403 -> 3321
+C = np.empty((len(singles),N),dtype=np.float32)
+from scipy.stats import norm
+for i,var in enumerate(var_dic.values()):
+    C[i,:] = norm.rvs(loc=var,scale=1,size=N)
+
+C_df = pd.DataFrame(data=C,index=list(var_dic.keys()),columns=['sample_{}'.format(i+1) for i in range(100)])
+
+df_list = []
+for pair in tqdm(pairs,total=len(pairs)):
+    no1, no2 = pair
+    df_tmp = C_df.loc[[no1,no2],:]
+    df_pair = pd.Series(name='{},{}'.format(no1,no2),data=df_tmp.values.mean(axis=0))
+    df_list.append(df_pair)
+final_df_var = pd.concat(df_list,axis=1).T
+
+
