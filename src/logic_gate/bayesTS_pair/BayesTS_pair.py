@@ -99,37 +99,46 @@ ensg2symbol = pd.Series(index=final_target['ensg'].tolist(),data=final_target['t
 # adata_final.X = csr_matrix(adata_final.X)
 # adata_final.write('adata_final.h5ad')  # 3570 × 3644
 
-# ### 5. add gene symbol to the full_result
-# result = pd.read_csv('run_bayesTS_pairs/full_results.txt',sep='\t',index_col=0)
-# col = []
-# for item in result.index:
-#     no1,no2 = item.split(',')
-#     gene1 = ensg2symbol[no1]
-#     gene2 = ensg2symbol[no2]
-#     col.append(','.join([gene1,gene2]))
-# result['gene_symbols'] = col
+### 5. add gene symbol to the full_result
+result = pd.read_csv('run_bayesTS_pairs/full_results.txt',sep='\t',index_col=0)
+col = []
+for item in result.index:
+    no1,no2 = item.split(',')
+    gene1 = ensg2symbol[no1]
+    gene2 = ensg2symbol[no2]
+    col.append(','.join([gene1,gene2]))
+result['gene_symbols'] = col
 
-# db = pd.read_csv('full_results_XY.txt',sep='\t',index_col=0)
-# gene2sigma = db['mean_sigma'].to_dict()
-# col1 = []
-# col2 = []
-# col3 = []
-# col4 = []
-# for item,sigma in zip(result.index.values,result['mean_sigma']):
-#     t1,t2 = item.split(',')
-#     sigma1 = gene2sigma[t1]
-#     sigma2 = gene2sigma[t2]
-#     delta1 = sigma - sigma1
-#     delta2 = sigma - sigma2
-#     col1.append(sigma1)
-#     col2.append(sigma2)
-#     col3.append(delta1)
-#     col4.append(delta2)
-# result['sigma1'] = col1
-# result['sigma2'] = col2
-# result['delta1'] = col3
-# result['delta2'] = col4
-# result.to_csv('full_results_XY_pair_post.txt',sep='\t')
+db = pd.read_csv('full_results_XY.txt',sep='\t',index_col=0)
+gene2sigma = db['mean_sigma'].to_dict()
+col1 = []
+col2 = []
+col3 = []
+col4 = []
+for item,sigma in zip(result.index.values,result['mean_sigma']):
+    t1,t2 = item.split(',')
+    sigma1 = gene2sigma[t1]
+    sigma2 = gene2sigma[t2]
+    delta1 = sigma - sigma1
+    delta2 = sigma - sigma2
+    col1.append(sigma1)
+    col2.append(sigma2)
+    col3.append(delta1)
+    col4.append(delta2)
+result['sigma1'] = col1
+result['sigma2'] = col2
+result['delta1'] = col3
+result['delta2'] = col4
+
+def make_order_same(x):
+    lis = x.split(',')
+    lis.sort()
+    new_x = ','.join(lis)
+    return new_x
+
+
+result.index = list(map(make_order_same,result.index.tolist()))
+result.to_csv('full_results_XY_pair_post.txt',sep='\t')
 
 # generate samples for other three metrics
 N = 100
@@ -170,6 +179,8 @@ for pair in tqdm(pairs,total=len(pairs)):
     df_pair = pd.Series(name='{},{}'.format(no1,no2),data=df_tmp.values.mean(axis=0))
     df_list.append(df_pair)
 final_df = pd.concat(df_list,axis=1).T
+final_df.index = list(map(make_order_same,final_df.index.tolist()))
+final_df.to_csv('A_input.txt',sep='\t')
 
 lfc = pd.read_csv('logFC.csv',index_col=0)
 all_lfc = lfc['Log Fold Change'].values
@@ -202,6 +213,8 @@ for pair in tqdm(pairs,total=len(pairs)):
     df_pair = pd.Series(name='{},{}'.format(no1,no2),data=df_tmp.values.mean(axis=0))
     df_list.append(df_pair)
 final_df_dep = pd.concat(df_list,axis=1).T
+final_df_dep.index = list(map(make_order_same,final_df_dep.index.tolist()))
+final_df_dep.to_csv('B_input.txt',sep='\t')
 
 
 ### 3. heterogeneity
@@ -226,5 +239,11 @@ for pair in tqdm(pairs,total=len(pairs)):
     df_pair = pd.Series(name='{},{}'.format(no1,no2),data=df_tmp.values.mean(axis=0))
     df_list.append(df_pair)
 final_df_var = pd.concat(df_list,axis=1).T
+final_df_var.index = list(map(make_order_same,final_df_var.index.tolist()))
+final_df_var.to_csv('C_input.txt',sep='\t')
+
+
+#### generate final input files
+
 
 
