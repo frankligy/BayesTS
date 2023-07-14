@@ -187,7 +187,6 @@ all_lfc = lfc['Log Fold Change'].values
 ps = norm.fit(data=all_lfc)   # (0.17019986399218104, 1.3574141344839383), in standard N~(0,1), 3 can capture over 99% variation, now 3*1.35=4.07
 
 
-
 ### 2. dependency, i have confirmed the 49 cell line models included are all GB releted
 dep = pd.read_csv('dependentGene.csv',index_col=0).iloc[:,:-2]
 dep['ensg'] = [dic.get(item,None) for item in dep['gene']]
