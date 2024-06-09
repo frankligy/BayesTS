@@ -643,7 +643,7 @@ def test_and_graph_model(model,*args):
     print(trace.format_shapes())
     # pyro.render_model(model, model_args=(*args), render_distributions=True, render_params=True, filename='model.pdf')
 
-def basic_configure(X,Y,Z,weights):
+def basic_configure(raw_X,Y,Z,weights):
     # basic configure
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(device)
@@ -778,17 +778,6 @@ def generate_inputs(adata,protein,dic):
     t = X.shape[1]
     weights = weighting(adata,dic,t)
 
-    with open('uids.p','wb') as f:
-        pickle.dump(uids,f)
-    with open('weights.p','wb') as f:
-        pickle.dump(weights,f)
-    with open('Z.p','wb') as f:
-        pickle.dump(Z,f)
-    with open('Y.p','wb') as f:
-        pickle.dump(Y,f)
-    with open('X.p','wb') as f:
-        pickle.dump(X,f)
-  
     return X,Y,Z,weights,uids
 
 def generate_input_XY(adata,dic):
@@ -820,11 +809,11 @@ def generate_input_XY(adata,dic):
         pickle.dump(raw_X, f)   
     return X,Y,raw_X,weights,uids
 
-def basic_configure_XY(X,Y,weights,uids):
+def basic_configure_XY(raw_X,Y,weights,uids):
     # basic configure
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(device)
-    X = torch.tensor(X.T,device=device)
+    X = torch.tensor(raw_X.T,device=device)
     Y = torch.tensor(Y.T,device=device)
     n = X.shape[1]
     s = Y.shape[0]
@@ -894,6 +883,8 @@ def main(args):
         protein = pd.read_csv(args.protein,sep='\t')
         X,Y,Z,weights,uids = generate_inputs(adata,protein,dic)
         device,X,Y,Z,n,s,t,p,weights = basic_configure(X,Y,Z,weights)
+        # derive the scale of model_Y using emprical bayes
+        # please do
         # derive w_x, w_y, w_z
         s_x = train_single(model_X,guide_X,'X',X,weights,True)
         s_y = train_single(model_Y,guide_Y,'Y',Y,True)
