@@ -18,7 +18,6 @@ from pyro.infer import SVI,Trace_ELBO
 from pyro.optim import Adam,ClippedAdam
 from scipy.sparse import csr_matrix
 from pyro.poutine import scale
-from sklearn.mixture import GaussianMixture
 from scipy.stats import pearsonr, spearmanr
 import numpy.ma as ma
 from sklearn.metrics import precision_recall_curve,auc,roc_curve,accuracy_score
@@ -449,13 +448,13 @@ def guide_X_Z(X,Z,weights,train):
     total = pyro.sample('total',dist.Binomial(50,weights).expand([t]).to_event(1))
     return {'sigma':sigma}
 
-def model_Y(Y,train):
+def model_Y(Y,lambda_rate,train):
     subsample_size = 10
     a = torch.tensor(2.,device=device)
     b = torch.tensor(2.,device=device)
     sigma = pyro.sample('sigma',dist.Beta(a,b).expand([n]).to_event(1))
-    a = torch.tensor(10.,device=device)
-    b = torch.tensor(1.,device=device)
+    a = torch.tensor(1.,device=device)
+    b = torch.tensor(lambda_rate,device=device)
     beta_y = pyro.sample('beta_y',dist.Gamma(a,b))
     if train:
         with pyro.poutine.scale(scale=1), pyro.plate('data_Y',s,subsample_size=subsample_size) as ind:
@@ -466,12 +465,12 @@ def model_Y(Y,train):
             nc = pyro.sample('nc',dist.LogNormal(beta_y*sigma,0.5).expand([s,n]).to_event(1),obs=Y)
     return {'nc':nc}   
 
-def guide_Y(Y,train):
+def guide_Y(Y,lambda_rate,train):
     alpha = pyro.param('alpha',lambda:torch.tensor(np.full(n,2.0),device=device),constraint=constraints.positive)
     beta = pyro.param('beta',lambda:torch.tensor(np.full(n,2.0),device=device),constraint=constraints.positive)
     sigma = pyro.sample('sigma',dist.Beta(alpha,beta).expand([n]).to_event(1))
-    a = torch.tensor(10.,device=device)
-    b = torch.tensor(1.,device=device)
+    a = torch.tensor(1.,device=device)
+    b = torch.tensor(lambda_rate,device=device)
     beta_y = pyro.sample('beta_y',dist.Gamma(a,b))
     return {'sigma':sigma}  
 
@@ -512,8 +511,8 @@ def model_Z(Z,train):
     sigma = pyro.sample('sigma',dist.Beta(a,b).expand([n]).to_event(1))
     high_prob = 2./3. * sigma
     medium_prob = 1./3. * sigma
-    low_prob = 2./3. * (1-sigma)
-    not_prob = 1./3. * (1-sigma)
+    low_prob = 1./3. * (1-sigma)
+    not_prob = 2./3. * (1-sigma)
     prob = torch.stack([high_prob,medium_prob,low_prob,not_prob],axis=0).T   # n * p
     if train:
         with pyro.poutine.scale(scale=1), pyro.plate('data_Z',p,subsample_size=subsample_size) as ind:
@@ -643,11 +642,10 @@ def test_and_graph_model(model,*args):
     print(trace.format_shapes())
     # pyro.render_model(model, model_args=(*args), render_distributions=True, render_params=True, filename='model.pdf')
 
-def basic_configure(raw_X,Y,Z,weights):
+def basic_configure(X,Y,Z,weights):
     # basic configure
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    print(device)
-    X = torch.tensor(raw_X.T,device=device)
+    X = torch.tensor(X.T,device=device)
     Y = torch.tensor(Y.T,device=device)
     Z = torch.tensor(Z.T,device=device)
     n = X.shape[1]
@@ -752,6 +750,27 @@ def train_and_infer_XY(model,guide,*args):
 def generate_inputs(adata,protein,dic):
     Z,adata,uids = compute_z(adata,protein,dic)  # 13350 * 89
     Y = compute_y(adata,uids)  # 13350 * 1228
+    # derive lambda using ebayes
+    median_quantiles = np.quantile(Y,0.5,axis=1)
+    a = median_quantiles / 0.5
+    a = a[a>0]
+    a = np.sort(a)
+    covered = np.arange(len(a)) / len(a)
+    df = pd.DataFrame(data={'a':a,'covered':covered})
+    cutoff = df.loc[df['covered']<=0.95,:].iloc[-1,0]
+    a = a[a<=cutoff]  
+    fig,ax = plt.subplots()
+    sns.histplot(a,ax=ax,stat='density')
+    lambda_rate = 1/np.mean(a)
+    from scipy.stats import expon,gamma
+    x = np.linspace(0, cutoff, 1000)
+    pdf = expon.pdf(x, scale=1/lambda_rate)
+    pdf = gamma.pdf(x,a=1,scale=1/lambda_rate)
+    ax.plot(x,pdf)
+    ax.set_title('optimal lambda is {}\nMean is {}'.format(round(lambda_rate,2),round(1/lambda_rate,2)))
+    plt.savefig(os.path.join(outdir,'eBayes_decide_beta_y.pdf'),bbox_inches='tight')
+    plt.close()
+    # continue
     Y = np.where(Y==0,1e-5,Y)
 
     '''below is to find best cutoff for tissue distribution'''
@@ -765,20 +784,12 @@ def generate_inputs(adata,protein,dic):
     best_cutoff = 3
     X, annotated_x = compute_scaled_x(adata,uids,best_cutoff)  # 13350 * 49
 
-    thresholded_Y = np.empty_like(Y,dtype=np.float32)
-    cond_Y = np.empty_like(Y,dtype=bool)
-    ths = []
-    for i in tqdm(range(Y.shape[0]),total=Y.shape[0]):
-        thresholded_Y[i,:], cond_Y[i,:], th = threshold(Y[i,:],'hardcode',v=best_cutoff)
-        ths.append(th)
-    new_adata = get_thresholded_adata(adata,cond_Y)
-
     n = X.shape[0]
     s = Y.shape[1]
     t = X.shape[1]
     weights = weighting(adata,dic,t)
 
-    return X,Y,Z,weights,uids
+    return X,Y,Z,weights,uids,lambda_rate
 
 def generate_input_XY(adata,dic):
     uids = adata.obs_names.tolist()
@@ -841,7 +852,7 @@ def train_single(model,guide,name,*args):
     clipped_adam = ClippedAdam({'betas':(0.95,0.999)})
     elbo = Trace_ELBO()
 
-    n_steps = 500
+    n_steps = 5000
     pyro.clear_param_store()
     svi = SVI(model, guide, adam, loss=Trace_ELBO())
     losses = []
@@ -852,11 +863,15 @@ def train_single(model,guide,name,*args):
     plt.plot(losses)
     plt.xlabel("SVI step")
     plt.ylabel("ELBO loss")
-    plt.savefig('elbo_loss_train_single_{}.pdf'.format(name),bbox_inches='tight')
+    plt.savefig(os.path.join(outdir,'elbo_loss_train_single_{}.pdf'.format(name)),bbox_inches='tight')
     plt.close()
 
-    largest10 = np.sort(losses)[-10:]
+    largest10 = np.sort(losses)[-50:]
     # return the scale of this modality
+
+    # write something to indicate its success
+    with open(os.path.join(outdir,'train_single_{}_done'.format(name)),'w') as f:
+        f.write('success')
     return np.median(largest10)
 
 '''main program starts'''
@@ -865,7 +880,12 @@ def main(args):
 
     adata = ad.read_h5ad(args.input)
     dic = pd.read_csv(args.weight,sep='\t',index_col=0).to_dict()
-    global n,s,t,device,uids
+    global n,s,t,device,uids,scale,outdir
+    outdir = args.outdir
+
+    if not os.path.exists(outdir):
+        os.mkdir(outdir)
+
     if args.mode == 'XY':
         X,Y,raw_X,weights,uids = generate_input_XY(adata,dic)
         device,X,Y,n,s,t,weights = basic_configure_XY(raw_X,Y,weights,uids)
@@ -881,20 +901,35 @@ def main(args):
     elif args.mode == 'XYZ':
         global p
         protein = pd.read_csv(args.protein,sep='\t')
-        X,Y,Z,weights,uids = generate_inputs(adata,protein,dic)
+        X,Y,Z,weights,uids,lambda_rate = generate_inputs(adata,protein,dic)
         device,X,Y,Z,n,s,t,p,weights = basic_configure(X,Y,Z,weights)
-        # derive the scale of model_Y using emprical bayes
-        # please do
+        # check
+        print('device:{}'.format(device))
+        print('X:{}'.format(X.shape))
+        print('Y:{}'.format(Y.shape))
+        print('Z:{}'.format(Z.shape))
+        print('n:{}'.format(n))
+        print('s:{}'.format(s))
+        print('t:{}'.format(t))
+        print('p:{}'.format(p))
+        print('weights:{}'.format(weights.shape))
+        print('lambda_rate/beta:{}'.format(lambda_rate))
         # derive w_x, w_y, w_z
         s_x = train_single(model_X,guide_X,'X',X,weights,True)
-        s_y = train_single(model_Y,guide_Y,'Y',Y,True)
+        while not os.path.exists(os.path.join(outdir,'train_single_X_done')):
+            s_x = train_single(model_X,guide_X,'X',X,weights,True) 
+        s_y = train_single(model_Y,guide_Y,'Y',Y,lambda_rate,True)
+        while not os.path.exists(os.path.join(outdir,'train_single_Y_done')):
+            s_y = train_single(model_Y,guide_Y,'Y',Y,lambda_rate,True)
         s_z = train_single(model_Z,guide_Z,'Z',Z,True)
+        while not os.path.exists(os.path.join(outdir,'train_single_Z_done')):
+            s_z = train_single(model_Z,guide_Z,'Z',Z,True)
         lis = np.array([s_x,s_y,s_z])
         small = lis.min()
         w_x = small / s_x
         w_y = small / s_y
         w_z = small / s_z
-        print(s_x,s_y,s_z,lis,small,w_x,w_y,w_z)
+        print(lis,small,w_x,w_y,w_z)
         # run
         svi_sigma = train_and_infer(model,guide,X,Y,Z,weights,True,w_x,w_y,w_z)
 
@@ -905,6 +940,7 @@ if __name__ == '__main__':
     parser.add_argument('--weight',type=str,default='',help='path to a txt file with tissue and weights that you want to change')
     parser.add_argument('--mode',type=str,default='XYZ',help='XYZ use full model, XY use only RNA model')
     parser.add_argument('--protein',type=str,default='',help='path to the protein info downloaded from Synapse')
+    parser.add_argument('--outdir',type=str,default='.',help='path to the output directory')
     args = parser.parse_args()
     main(args)
 
