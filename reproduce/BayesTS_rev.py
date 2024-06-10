@@ -530,13 +530,13 @@ def guide_Z(Z,train):
     return {'sigma':sigma}
 
 
-def model(X,Y,Z,weights,train,w_x,w_y,w_z):
+def model(X,Y,Z,weights,lambda_rate,train,w_x,w_y,w_z):
     subsample_size = 10
     a = torch.tensor(2.,device=device)
     b = torch.tensor(2.,device=device)
     sigma = pyro.sample('sigma',dist.Beta(a,b).expand([n]).to_event(1))
-    a = torch.tensor(10.,device=device)
-    b = torch.tensor(1.,device=device)
+    a = torch.tensor(1.,device=device)
+    b = torch.tensor(lambda_rate,device=device)
     beta_y = pyro.sample('beta_y',dist.Gamma(a,b))
     a = torch.tensor(25.,device=device)
     b = torch.tensor(1.,device=device)
@@ -546,8 +546,8 @@ def model(X,Y,Z,weights,train,w_x,w_y,w_z):
     scaled_X = torch.round(X * total.unsqueeze(-1))
     high_prob = 2./3. * sigma
     medium_prob = 1./3. * sigma
-    low_prob = 2./3. * (1-sigma)
-    not_prob = 1./3. * (1-sigma)
+    low_prob = 1./3. * (1-sigma)
+    not_prob = 2./3. * (1-sigma)
     prob = torch.stack([high_prob,medium_prob,low_prob,not_prob],axis=0).T   # n * p
     if train:
         with pyro.poutine.scale(scale=w_x), pyro.plate('data_X',t,subsample_size=subsample_size) as ind:
@@ -569,15 +569,15 @@ def model(X,Y,Z,weights,train,w_x,w_y,w_z):
     return {'c':c,'nc':nc,'pc':pc}
 
 
-def guide(X,Y,Z,weights,train,w_x,w_y,w_z):
+def guide(X,Y,Z,weights,lambda_rate,train,w_x,w_y,w_z):
     alpha = pyro.param('alpha',lambda:torch.tensor(np.full(n,2.0),device=device),constraint=constraints.positive)
     beta = pyro.param('beta',lambda:torch.tensor(np.full(n,2.0),device=device),constraint=constraints.positive)
     sigma = pyro.sample('sigma',dist.Beta(alpha,beta).expand([n]).to_event(1))
     a = torch.tensor(10.,device=device)
     b = torch.tensor(1.,device=device)
     beta_y = pyro.sample('beta_y',dist.Gamma(a,b))
-    a = torch.tensor(25.,device=device)
-    b = torch.tensor(1.,device=device)
+    a = torch.tensor(1.,device=device)
+    b = torch.tensor(lambda_rate,device=device)
     beta_x = pyro.sample('beta_x',dist.Gamma(a,b))
     total = pyro.sample('total',dist.Binomial(50,weights).expand([t]).to_event(1))
     return {'sigma':sigma}
@@ -677,7 +677,7 @@ def train_and_infer(model,guide,*args):
     plt.plot(losses)
     plt.xlabel("SVI step")
     plt.ylabel("ELBO loss")
-    plt.savefig('elbo_loss.pdf',bbox_inches='tight')
+    plt.savefig(os.path.join(outdir,'elbo_loss.pdf'),bbox_inches='tight')
     plt.close()
 
     with pyro.plate('samples',1000,dim=-1):
@@ -687,11 +687,11 @@ def train_and_infer(model,guide,*args):
     alpha = pyro.param('alpha').data.cpu().numpy()
     beta = pyro.param('beta').data.cpu().numpy()
     df = pd.DataFrame(index=uids,data={'mean_sigma':sigma,'alpha':alpha,'beta':beta,'prior_sigma':prior_sigma})
-    with open('X.p','rb') as f:
+    with open(os.path.join(outdir,'X.p'),'rb') as f:
         X = pickle.load(f)
-    with open('Y.p','rb') as f:
+    with open(os.path.join(outdir'Y.p'),'rb') as f:
         Y = pickle.load(f)
-    with open('Z.p','rb') as f:
+    with open(os.path.join(outdir'Z.p'),'rb') as f:
         Z = pickle.load(f)
     Y_mean = Y.mean(axis=1)
     X_mean = X.mean(axis=1)
@@ -699,9 +699,9 @@ def train_and_infer(model,guide,*args):
     df['Y_mean'] = Y_mean
     df['X_mean'] = X_mean
     df['Z_mean'] = Z_mean
-    df.to_csv('full_results.txt',sep='\t')
-    diagnose('full_results.txt',output_name='pyro_full_diagnosis.pdf')
-    return svi_sigma
+    df.to_csv(os.path.join(outdir,'full_results.txt'),sep='\t')
+    # diagnose(os.path.join(outdir,'full_results.txt'),output_name='pyro_full_diagnosis.pdf')
+
 
 def train_and_infer_XY(model,guide,*args):
 
@@ -931,7 +931,13 @@ def main(args):
         w_z = small / s_z
         print(lis,small,w_x,w_y,w_z)
         # run
-        svi_sigma = train_and_infer(model,guide,X,Y,Z,weights,True,w_x,w_y,w_z)
+        with open(os.path.join(outdir,'X.p'),'wb') as f:
+            pickle.dump(X,f)
+        with open(os.path.join(outdir,'Y.p'),'wb') as f:
+            pickle.dump(Y,f)
+        with open(os.path.join(outdir,'Z.p'),'wb') as f:
+            pickle.dump(Z,f)
+        train_and_infer(model,guide,X,Y,Z,weights,lambda_rate,True,w_x,w_y,w_z)
 
 
 if __name__ == '__main__':
