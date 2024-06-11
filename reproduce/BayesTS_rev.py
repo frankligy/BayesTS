@@ -22,6 +22,7 @@ from scipy.stats import pearsonr, spearmanr
 import numpy.ma as ma
 from sklearn.metrics import precision_recall_curve,auc,roc_curve,accuracy_score
 import argparse
+from sklearn.preprocessing import MinMaxScaler
 
 import matplotlib as mpl
 mpl.rcParams['pdf.fonttype'] = 42
@@ -434,8 +435,8 @@ def model_Y(Y,lambda_rate,train):
     a = torch.tensor(2.,device=device)
     b = torch.tensor(2.,device=device)
     sigma = pyro.sample('sigma',dist.Beta(a,b).expand([n]).to_event(1))
-    a = torch.tensor(1.,device=device)
-    b = torch.tensor(lambda_rate,device=device)
+    a = torch.tensor(1.0/lambda_rate,device=device)
+    b = torch.tensor(1.,device=device)
     beta_y = pyro.sample('beta_y',dist.Gamma(a,b))
     if train:
         with pyro.poutine.scale(scale=1), pyro.plate('data_Y',s,subsample_size=subsample_size) as ind:
@@ -450,8 +451,8 @@ def guide_Y(Y,lambda_rate,train):
     alpha = pyro.param('alpha',lambda:torch.tensor(np.full(n,2.0),device=device),constraint=constraints.positive)
     beta = pyro.param('beta',lambda:torch.tensor(np.full(n,2.0),device=device),constraint=constraints.positive)
     sigma = pyro.sample('sigma',dist.Beta(alpha,beta).expand([n]).to_event(1))
-    a = torch.tensor(1.,device=device)
-    b = torch.tensor(lambda_rate,device=device)
+    a = torch.tensor(1.0/lambda_rate,device=device)
+    b = torch.tensor(1.,device=device)
     beta_y = pyro.sample('beta_y',dist.Gamma(a,b))
     return {'sigma':sigma}  
 
@@ -524,8 +525,8 @@ def model(X,Y,Z,weights,lambda_rate,train,w_x,w_y,w_z):
     a = torch.tensor(2.,device=device)
     b = torch.tensor(2.,device=device)
     sigma = pyro.sample('sigma',dist.Beta(a,b).expand([n]).to_event(1))
-    a = torch.tensor(1.,device=device)
-    b = torch.tensor(lambda_rate,device=device)
+    a = torch.tensor(1.0/lambda_rate,device=device)
+    b = torch.tensor(1.,device=device)
     beta_y = pyro.sample('beta_y',dist.Gamma(a,b))
     a = torch.tensor(25.,device=device)
     b = torch.tensor(1.,device=device)
@@ -562,8 +563,8 @@ def guide(X,Y,Z,weights,lambda_rate,train,w_x,w_y,w_z):
     alpha = pyro.param('alpha',lambda:torch.tensor(np.full(n,2.0),device=device),constraint=constraints.positive)
     beta = pyro.param('beta',lambda:torch.tensor(np.full(n,2.0),device=device),constraint=constraints.positive)
     sigma = pyro.sample('sigma',dist.Beta(alpha,beta).expand([n]).to_event(1))
-    a = torch.tensor(1.,device=device)
-    b = torch.tensor(lambda_rate,device=device)
+    a = torch.tensor(1.0/lambda_rate,device=device)
+    b = torch.tensor(1.,device=device)
     beta_y = pyro.sample('beta_y',dist.Gamma(a,b))
     a = torch.tensor(25.,device=device)
     b = torch.tensor(1.,device=device)
@@ -655,45 +656,48 @@ def train_and_infer(model,guide,*args):
     svi_sigma = samples['sigma']  # torch.Size([1000, n])
     prior_sigma = svi_sigma.data.cpu().numpy().mean(axis=0)
 
-    n_steps = 5000
-    pyro.clear_param_store()
-    svi = SVI(model, guide, adam, loss=Trace_ELBO())
-    losses = []
-    for step in tqdm(range(n_steps),total=n_steps):  
-        loss = svi.step(*args)
-        losses.append(loss)
-    plt.figure(figsize=(5, 2))
-    plt.plot(losses)
-    plt.xlabel("SVI step")
-    plt.ylabel("ELBO loss")
-    plt.savefig(os.path.join(outdir,'elbo_loss.pdf'),bbox_inches='tight')
-    plt.close()
+    try:
+        n_steps = 5000
+        pyro.clear_param_store()
+        svi = SVI(model, guide, adam, loss=Trace_ELBO())
+        losses = []
+        for step in tqdm(range(n_steps),total=n_steps):  
+            loss = svi.step(*args)
+            losses.append(loss)
+        plt.figure(figsize=(5, 2))
+        plt.plot(losses)
+        plt.xlabel("SVI step")
+        plt.ylabel("ELBO loss")
+        plt.savefig(os.path.join(outdir,'elbo_loss.pdf'),bbox_inches='tight')
+        plt.close()
 
-    # also save the datafram
-    loss_df = pd.DataFrame(data={'step':np.arange(n_steps)+1,'loss':losses})
-    loss_df.to_csv(os.path.join(outdir,'loss_df.txt'),sep='\t',index=None)
+        # also save the datafram
+        loss_df = pd.DataFrame(data={'step':np.arange(n_steps)+1,'loss':losses})
+        loss_df.to_csv(os.path.join(outdir,'loss_df.txt'),sep='\t',index=None)
 
-    with pyro.plate('samples',1000,dim=-1):
-        samples = guide(*args)
-    svi_sigma = samples['sigma']  # torch.Size([1000, n])
-    sigma = svi_sigma.data.cpu().numpy().mean(axis=0)
+        with pyro.plate('samples',1000,dim=-1):
+            samples = guide(*args)
+        svi_sigma = samples['sigma']  # torch.Size([1000, n])
+        sigma = svi_sigma.data.cpu().numpy().mean(axis=0)
 
-    alpha = pyro.param('alpha').data.cpu().numpy()
-    beta = pyro.param('beta').data.cpu().numpy()
-    df = pd.DataFrame(index=uids,data={'mean_sigma':sigma,'alpha':alpha,'beta':beta,'prior_sigma':prior_sigma})
-    with open(os.path.join(outdir,'X.p'),'rb') as f:
-        X = pickle.load(f)
-    with open(os.path.join(outdir,'Y.p'),'rb') as f:
-        Y = pickle.load(f)
-    with open(os.path.join(outdir,'Z.p'),'rb') as f:
-        Z = pickle.load(f)
-    Y_mean = Y.mean(axis=0)
-    X_mean = X.mean(axis=0)
-    Z_mean = Z.mean(axis=0)
-    df['Y_mean'] = Y_mean
-    df['X_mean'] = X_mean
-    df['Z_mean'] = Z_mean
-    df.to_csv(os.path.join(outdir,'full_results.txt'),sep='\t')
+        alpha = pyro.param('alpha').data.cpu().numpy()
+        beta = pyro.param('beta').data.cpu().numpy()
+        df = pd.DataFrame(index=uids,data={'mean_sigma':sigma,'alpha':alpha,'beta':beta,'prior_sigma':prior_sigma})
+        with open(os.path.join(outdir,'X.p'),'rb') as f:
+            X = pickle.load(f)
+        with open(os.path.join(outdir,'Y.p'),'rb') as f:
+            Y = pickle.load(f)
+        with open(os.path.join(outdir,'Z.p'),'rb') as f:
+            Z = pickle.load(f)
+        Y_mean = Y.mean(axis=0)
+        X_mean = X.mean(axis=0)
+        Z_mean = Z.mean(axis=0)
+        df['Y_mean'] = Y_mean
+        df['X_mean'] = X_mean
+        df['Z_mean'] = Z_mean
+        df.to_csv(os.path.join(outdir,'full_results.txt'),sep='\t')
+    except:
+        pass
 
 
 
@@ -861,15 +865,141 @@ def train_single(model,guide,name,*args):
         plt.savefig(os.path.join(outdir,'elbo_loss_train_single_{}.pdf'.format(name)),bbox_inches='tight')
         plt.close()
 
-        largest10 = np.sort(losses)[-50:]
+        largest = np.sort(losses)[-10:]
 
         # write something to indicate its success
         with open(os.path.join(outdir,'train_single_{}_done'.format(name)),'w') as f:
             f.write('success')
-        return np.median(largest10)
+        return np.median(largest)
 
     except:
         return None
+
+# diagnose
+def diagnose_2d(outdir,ylim=(-1,200)):
+    df = pd.read_csv(os.path.join(outdir,'full_results.txt'),sep='\t',index_col=0)
+    fig,ax = plt.subplots()
+    im = ax.scatter(df['X_mean'],df['Y_mean'],c=df['mean_sigma'],s=0.5**2,cmap='viridis')
+    plt.colorbar(im)
+    ax.set_ylabel('average_normalized_counts')
+    ax.set_xlabel('average_n_present_samples_per_tissue')
+    ax.set_ylim(ylim)
+    plt.savefig(os.path.join(outdir,'diagnosis_2d.pdf'),bbox_inches='tight')
+    plt.close()
+
+def diagnose_3d(outdir):
+    result = pd.read_csv(os.path.join(outdir,'full_results.txt'),sep='\t',index_col=0)
+    result = result.loc[result['Y_mean']<=1500,:]
+    sigma = result['mean_sigma'].values
+    Y_mean = MinMaxScaler().fit_transform(result['Y_mean'].values.reshape(-1,1)).squeeze()
+    X_mean = MinMaxScaler().fit_transform(result['X_mean'].values.reshape(-1,1)).squeeze()
+    Z_mean = MinMaxScaler().fit_transform(result['Z_mean'].values.reshape(-1,1)).squeeze()
+    fig = plt.figure()
+    ax = fig.add_subplot(projection='3d')
+    xs = X_mean
+    ys = Y_mean
+    zs = Z_mean
+    ax.scatter(xs, ys, zs, marker='o',s=1,c=1-sigma)
+    ax.set_xlabel('X Label')
+    ax.set_ylabel('Y Label')
+    ax.set_zlabel('Z Label')
+    plt.savefig(os.path.join(outdir,'diagnosis_3d.pdf'),bbox_inches='tight')
+    plt.close()
+
+def cart_set54_benchmark(target_path,outdir):
+    target = pd.read_csv(target_path,sep='\t',index_col=0)
+    mapping = {e:g for g,e in target['Ensembl ID'].to_dict().items()}
+    target = target.loc[target['Category']=='in clinical trials',:]['Ensembl ID'].tolist()
+    result = pd.read_csv(os.path.join(outdir,'full_results.txt'),sep='\t',index_col=0)
+    target = list(set(result.index).intersection(set(target)))
+    result = result.loc[target,:]
+    result['gene'] = result.index.map(mapping).values
+    result = result.sort_values(by='mean_sigma')
+    result.to_csv(os.path.join(outdir,'cart_set54_targets.txt'),sep='\t')
+    fig,ax = plt.subplots()
+    ax.bar(x=np.arange(result.shape[0]),height=result['mean_sigma'].values)
+    ax.set_xticks(np.arange(result.shape[0]))
+    ax.set_xticklabels(result['gene'].values,fontsize=1,rotation=90)
+    ax.set_ylabel('inferred sigma')
+    plt.savefig(os.path.join(outdir,'cart_set54_targets_barplot.pdf'),bbox_inches='tight')
+    plt.close()
+
+    fig,ax = plt.subplots()
+    result['Z_mean'] *= -1
+    ax.imshow(MinMaxScaler().fit_transform(result.loc[:,['Y_mean','X_mean','Z_mean']].values).T)
+    ax.set_yticks([0,1,2])
+    ax.set_yticklabels(['Y','X','Z'])
+    plt.savefig(os.path.join(outdir,'cart_set54_targets_evidence.pdf'),bbox_inches='tight')
+    plt.close()
+
+def cart_set65_benchmark():
+    set65 = {
+        'NANOG':'ENSG00000111704',
+        'CEACAM8':'ENSG00000124469',
+        'TSPAN16':'ENSG00000130167',
+        'SLC13A5':'ENSG00000141485',
+        'GLRB':'ENSG00000109738',
+        'DYRK4':'ENSG00000010219',
+        'KCNN4':'ENSG00000104783',
+        'SV2C':'ENSG00000122012',
+        'SIGLEC8':'ENSG00000105366',
+        'RBMXL3':'ENSG00000175718',
+        'HIST1H1T':'ENSG00000187475',
+        'CCR8':'ENSG00000179934',
+        'CCNB3':'ENSG00000147082',
+        'ALPPL2':'ENSG00000163286',
+        'ZP2':'ENSG00000103310',
+        'OTUB2':'ENSG00000089723',
+        'LILRA4':'ENSG00000239961',
+        'GRM2':'ENSG00000164082',
+        'PSG1':'ENSG00000231924',
+        'NBPF3':'ENSG00000142794',
+        'GYPA':'ENSG00000170180',
+        'ALPP':'ENSG00000163283',
+        'SPATA19':'ENSG00000166118',
+        'SLC6A11':'ENSG00000132164',
+        'SLC34A1':'ENSG00000131183',
+        'SLC2A14':'ENSG00000173262',
+        'SLC22A12':'ENSG00000197891',
+        'RBMXL2':'ENSG00000170748',
+        'KLK3':'ENSG00000142515',
+        'KLK2',
+        'FCRL1',
+        'CACNG3',
+        'UPK3B',
+        'FCRLA',
+        'DCLK2',
+        'IZUMO4',
+        'MUC12',
+        'HEPACAM',
+        'BPI',
+        'ATP6V0A4',
+        'HMMR',
+        'SLC45A3',
+        'SLC4A1',
+        'UPK1A'
+        'CD79B',
+        'CD27',
+        'ADGRV1',
+        'HERC5',
+        'CD37',
+        'CD2',
+        'C3AR1',
+        'SLC7A3',
+        'FASLG',
+        'NGB',
+        'CELSR3',
+        'CD3G',
+        'CEACAM3',
+        'TNFRSF13C',
+        'CD72',
+        'SLC46A2',
+        'MS4A8',
+        'CD79A',
+        'CD3D',
+        'CCR2',
+        'CD83',
+    }
 
 '''main program starts'''
 
@@ -936,6 +1066,14 @@ def main(args):
             pickle.dump(Z.data.cpu().numpy(),f)
         pyro.clear_param_store()
         train_and_infer(model,guide,X,Y,Z,weights,lambda_rate,True,w_x,w_y,w_z)
+        while not os.path.exists(os.path.join(outdir,'elbo_loss.pdf')):
+            pyro.clear_param_store()
+            train_and_infer(model,guide,X,Y,Z,weights,lambda_rate,True,w_x,w_y,w_z)
+        diagnose_2d(outdir)
+        diagnose_3d(outdir)
+        cart_set54_benchmark('cart_targets.txt',outdir)
+
+
 
 
 if __name__ == '__main__':
