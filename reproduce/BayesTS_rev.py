@@ -51,16 +51,6 @@ def compute_scaled_x(adata,uids,cutoff):
     annotated_x = pd.DataFrame(data=x,index=uids,columns=valid_tissue)
     return x,annotated_x
 
-def compute_x(adata,uids,cutoff):
-    total_tissue = adata.var['tissue'].unique()
-    valid_tissue = [tissue for tissue in total_tissue if adata[:,adata.var['tissue']==tissue].shape[1] >= 10]
-    x = np.zeros((len(uids),len(valid_tissue)))
-    for i,tissue in enumerate(valid_tissue):
-        sub = adata[uids,adata.var['tissue']==tissue]
-        total_count = sub.shape[1]
-        c = np.count_nonzero(np.where(sub.X.toarray()<=cutoff,0,sub.X.toarray()),axis=1) / total_count
-        x[:,i] = c
-    return x
 
 def get_thresholded_adata(adata,cond_Y):
     adata = adata.copy()
@@ -79,16 +69,7 @@ def weighting(adata,dic,t):
         weights[i] = w
     return weights
 
-def diagnose(final_path,ylim=(-1,200),output_name='diagnosis.pdf'):
-    df = pd.read_csv(final_path,sep='\t',index_col=0)
-    fig,ax = plt.subplots()
-    im = ax.scatter(df['X_mean'],df['Y_mean'],c=df['mean_sigma'],s=0.5**2,cmap='viridis')
-    plt.colorbar(im)
-    ax.set_ylabel('average_normalized_counts')
-    ax.set_xlabel('average_n_present_samples_per_tissue')
-    ax.set_ylim(ylim)
-    plt.savefig(output_name,bbox_inches='tight')
-    plt.close()
+
 
 def thresholding_kneedle(cpm,plot=False,S=1,interp_method='polynomial'):
     x = cpm[cpm > 0]  # all non-zero values
@@ -475,6 +456,10 @@ def guide_Y(Y,lambda_rate,train):
     return {'sigma':sigma}  
 
 def model_X(X,weights,train):
+    # now X is counts referenced to 25, but here we need proportion
+    constant = torch.tensor(25.,device=device)
+    X = X / constant
+    # now continue
     subsample_size = 10
     a = torch.tensor(2.,device=device)
     b = torch.tensor(2.,device=device)
@@ -531,6 +516,10 @@ def guide_Z(Z,train):
 
 
 def model(X,Y,Z,weights,lambda_rate,train,w_x,w_y,w_z):
+    # now X is counts referenced to 25, but here we need proportion
+    constant = torch.tensor(25.,device=device)
+    X = X / constant
+    # now continue
     subsample_size = 10
     a = torch.tensor(2.,device=device)
     b = torch.tensor(2.,device=device)
@@ -573,11 +562,11 @@ def guide(X,Y,Z,weights,lambda_rate,train,w_x,w_y,w_z):
     alpha = pyro.param('alpha',lambda:torch.tensor(np.full(n,2.0),device=device),constraint=constraints.positive)
     beta = pyro.param('beta',lambda:torch.tensor(np.full(n,2.0),device=device),constraint=constraints.positive)
     sigma = pyro.sample('sigma',dist.Beta(alpha,beta).expand([n]).to_event(1))
-    a = torch.tensor(10.,device=device)
-    b = torch.tensor(1.,device=device)
-    beta_y = pyro.sample('beta_y',dist.Gamma(a,b))
     a = torch.tensor(1.,device=device)
     b = torch.tensor(lambda_rate,device=device)
+    beta_y = pyro.sample('beta_y',dist.Gamma(a,b))
+    a = torch.tensor(25.,device=device)
+    b = torch.tensor(1.,device=device)
     beta_x = pyro.sample('beta_x',dist.Gamma(a,b))
     total = pyro.sample('total',dist.Binomial(50,weights).expand([t]).to_event(1))
     return {'sigma':sigma}
@@ -680,27 +669,32 @@ def train_and_infer(model,guide,*args):
     plt.savefig(os.path.join(outdir,'elbo_loss.pdf'),bbox_inches='tight')
     plt.close()
 
+    # also save the datafram
+    loss_df = pd.DataFrame(data={'step':np.arange(n_steps)+1,'loss':losses})
+    loss_df.to_csv(os.path.join(outdir,'loss_df.txt'),sep='\t',index=None)
+
     with pyro.plate('samples',1000,dim=-1):
         samples = guide(*args)
     svi_sigma = samples['sigma']  # torch.Size([1000, n])
     sigma = svi_sigma.data.cpu().numpy().mean(axis=0)
+
     alpha = pyro.param('alpha').data.cpu().numpy()
     beta = pyro.param('beta').data.cpu().numpy()
     df = pd.DataFrame(index=uids,data={'mean_sigma':sigma,'alpha':alpha,'beta':beta,'prior_sigma':prior_sigma})
     with open(os.path.join(outdir,'X.p'),'rb') as f:
         X = pickle.load(f)
-    with open(os.path.join(outdir'Y.p'),'rb') as f:
+    with open(os.path.join(outdir,'Y.p'),'rb') as f:
         Y = pickle.load(f)
-    with open(os.path.join(outdir'Z.p'),'rb') as f:
+    with open(os.path.join(outdir,'Z.p'),'rb') as f:
         Z = pickle.load(f)
-    Y_mean = Y.mean(axis=1)
-    X_mean = X.mean(axis=1)
-    Z_mean = Z.mean(axis=1)
+    Y_mean = Y.mean(axis=0)
+    X_mean = X.mean(axis=0)
+    Z_mean = Z.mean(axis=0)
     df['Y_mean'] = Y_mean
     df['X_mean'] = X_mean
     df['Z_mean'] = Z_mean
     df.to_csv(os.path.join(outdir,'full_results.txt'),sep='\t')
-    # diagnose(os.path.join(outdir,'full_results.txt'),output_name='pyro_full_diagnosis.pdf')
+
 
 
 def train_and_infer_XY(model,guide,*args):
@@ -852,27 +846,30 @@ def train_single(model,guide,name,*args):
     clipped_adam = ClippedAdam({'betas':(0.95,0.999)})
     elbo = Trace_ELBO()
 
-    n_steps = 5000
-    pyro.clear_param_store()
-    svi = SVI(model, guide, adam, loss=Trace_ELBO())
-    losses = []
-    for step in tqdm(range(n_steps),total=n_steps):  
-        loss = svi.step(*args)
-        losses.append(loss)
-    plt.figure(figsize=(5, 2))
-    plt.plot(losses)
-    plt.xlabel("SVI step")
-    plt.ylabel("ELBO loss")
-    plt.savefig(os.path.join(outdir,'elbo_loss_train_single_{}.pdf'.format(name)),bbox_inches='tight')
-    plt.close()
+    try:
+        n_steps = 5000
+        pyro.clear_param_store()
+        svi = SVI(model, guide, adam, loss=Trace_ELBO())
+        losses = []
+        for step in tqdm(range(n_steps),total=n_steps):  
+            loss = svi.step(*args)
+            losses.append(loss)
+        plt.figure(figsize=(5, 2))
+        plt.plot(losses)
+        plt.xlabel("SVI step")
+        plt.ylabel("ELBO loss")
+        plt.savefig(os.path.join(outdir,'elbo_loss_train_single_{}.pdf'.format(name)),bbox_inches='tight')
+        plt.close()
 
-    largest10 = np.sort(losses)[-50:]
-    # return the scale of this modality
+        largest10 = np.sort(losses)[-50:]
 
-    # write something to indicate its success
-    with open(os.path.join(outdir,'train_single_{}_done'.format(name)),'w') as f:
-        f.write('success')
-    return np.median(largest10)
+        # write something to indicate its success
+        with open(os.path.join(outdir,'train_single_{}_done'.format(name)),'w') as f:
+            f.write('success')
+        return np.median(largest10)
+
+    except:
+        return None
 
 '''main program starts'''
 
@@ -905,7 +902,7 @@ def main(args):
         device,X,Y,Z,n,s,t,p,weights = basic_configure(X,Y,Z,weights)
         # check
         print('device:{}'.format(device))
-        print('X:{}'.format(X.shape))
+        print('X:{} note: this is not percentage X shown in paper we will later scale it'.format(X.shape))
         print('Y:{}'.format(Y.shape))
         print('Z:{}'.format(Z.shape))
         print('n:{}'.format(n))
@@ -932,11 +929,12 @@ def main(args):
         print(lis,small,w_x,w_y,w_z)
         # run
         with open(os.path.join(outdir,'X.p'),'wb') as f:
-            pickle.dump(X,f)
+            pickle.dump(X.data.cpu().numpy(),f)
         with open(os.path.join(outdir,'Y.p'),'wb') as f:
-            pickle.dump(Y,f)
+            pickle.dump(Y.data.cpu().numpy(),f)
         with open(os.path.join(outdir,'Z.p'),'wb') as f:
-            pickle.dump(Z,f)
+            pickle.dump(Z.data.cpu().numpy(),f)
+        pyro.clear_param_store()
         train_and_infer(model,guide,X,Y,Z,weights,lambda_rate,True,w_x,w_y,w_z)
 
 

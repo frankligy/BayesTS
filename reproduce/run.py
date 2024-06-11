@@ -8,6 +8,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 from scipy.stats import pearsonr
+from sklearn.preprocessing import MinMaxScaler
 
 mpl.rcParams['pdf.fonttype'] = 42
 mpl.rcParams['ps.fonttype'] = 42
@@ -113,21 +114,91 @@ mpl.rcParams['font.family'] = 'Arial'
 # plt.close()
 
 # threshold the gene matrix when deriving the tissue distribution
-dic = {}
-for cutoff in np.arange(0,10,0.25):
-    result_path = 'result_{}.txt'.format(str(cutoff))
-    result = pd.read_csv(result_path,sep='\t',index_col=0)
-    repr_spearman = np.nanmean(result['spearman'].values)
-    repr_aupr = np.nanmean(result['aupr'].values)
-    dic[cutoff] = ((repr_spearman,repr_aupr))
+# dic = {}
+# for cutoff in np.arange(0,10,0.25):
+#     result_path = 'result_{}.txt'.format(str(cutoff))
+#     result = pd.read_csv(result_path,sep='\t',index_col=0)
+#     repr_spearman = np.nanmean(result['spearman'].values)
+#     repr_aupr = np.nanmean(result['aupr'].values)
+#     dic[cutoff] = ((repr_spearman,repr_aupr))
 
 
+# diagnose
+def diagnose_2d(outdir,ylim=(-1,200)):
+    df = pd.read_csv(os.path.join(outdir,'full_results.txt'),sep='\t',index_col=0)
+    fig,ax = plt.subplots()
+    im = ax.scatter(df['X_mean'],df['Y_mean'],c=df['mean_sigma'],s=0.5**2,cmap='viridis')
+    plt.colorbar(im)
+    ax.set_ylabel('average_normalized_counts')
+    ax.set_xlabel('average_n_present_samples_per_tissue')
+    ax.set_ylim(ylim)
+    plt.savefig(os.path.join(outdir,'diagnosis_2d.pdf'),bbox_inches='tight')
+    plt.close()
 
+def diagnose_3d(outdir):
+    result = pd.read_csv(os.path.join(outdir,'full_results.txt'),sep='\t',index_col=0)
+    result = result.loc[result['Y_mean']<=1500,:]
+    sigma = result['mean_sigma'].values
+    Y_mean = MinMaxScaler().fit_transform(result['Y_mean'].values.reshape(-1,1)).squeeze()
+    X_mean = MinMaxScaler().fit_transform(result['X_mean'].values.reshape(-1,1)).squeeze()
+    Z_mean = MinMaxScaler().fit_transform(result['Z_mean'].values.reshape(-1,1)).squeeze()
+    fig = plt.figure()
+    ax = fig.add_subplot(projection='3d')
+    xs = X_mean
+    ys = Y_mean
+    zs = Z_mean
+    ax.scatter(xs, ys, zs, marker='o',s=1,c=1-sigma)
+    ax.set_xlabel('X Label')
+    ax.set_ylabel('Y Label')
+    ax.set_zlabel('Z Label')
+    plt.savefig(os.path.join(outdir,'diagnosis_3d.pdf'),bbox_inches='tight')
+    plt.close()
 
-# loss
-# 3d plot
-# 54 set
-# 65 set
-# prior and posterior check
+def cart_set54_benchmark(target_path,outdir):
+    target = pd.read_csv(target_path,sep='\t',index_col=0)
+    mapping = {e:g for g,e in target['Ensembl ID'].to_dict().items()}
+    target = target.loc[target['Category']=='in clinical trials',:]['Ensembl ID'].tolist()
+    result = pd.read_csv(os.path.join(outdir,'full_results.txt'),sep='\t',index_col=0)
+    target = list(set(result.index).intersection(set(target)))
+    result = result.loc[target,:]
+    result['gene'] = result.index.map(mapping).values
+    result = result.sort_values(by='mean_sigma')
+    result.to_csv(os.path.join(outdir,'cart_set54_targets.txt'),sep='\t')
+    fig,ax = plt.subplots()
+    ax.bar(x=np.arange(result.shape[0]),height=result['mean_sigma'].values)
+    ax.set_xticks(np.arange(result.shape[0]))
+    ax.set_xticklabels(result['gene'].values,fontsize=1,rotation=90)
+    ax.set_ylabel('inferred sigma')
+    plt.savefig(os.path.join(outdir,'cart_set54_targets_barplot.pdf'),bbox_inches='tight')
+    plt.close()
 
-# how to do mcmc
+    fig,ax = plt.subplots()
+    result['Z_mean'] *= -1
+    ax.imshow(MinMaxScaler().fit_transform(result.loc[:,['Y_mean','X_mean','Z_mean']].values).T)
+    ax.set_yticks([0,1,2])
+    ax.set_yticklabels(['Y','X','Z'])
+    plt.savefig(os.path.join(outdir,'cart_set54_targets_evidence.pdf'),bbox_inches='tight')
+    plt.close()
+
+outdir = 'output'
+
+diagnose_2d(outdir)
+diagnose_3d(outdir)
+cart_set54_benchmark('cart_targets.txt',outdir)
+sys.exit('stop')
+
+loss_df = pd.read_csv(os.path.join(outdir,'loss_df.txt'),sep='\t')
+ylims = (0,1.0e7)
+loss_df = loss_df.loc[loss_df['loss']<ylims[1],:]
+plt.figure(figsize=(5, 2))
+plt.plot(loss_df['loss'].values)
+plt.xlabel("SVI step")
+plt.ylabel("ELBO loss")
+plt.savefig('loss_check.pdf',bbox_inches='tight')
+plt.close()
+sys.exit('stop')
+
+result = pd.read_csv(os.path.join(outdir,'full_results.txt'),sep='\t',index_col=0)
+sns.histplot(result['prior_sigma'])
+plt.savefig('check.pdf',bbox_inches='tight')
+plt.close()
