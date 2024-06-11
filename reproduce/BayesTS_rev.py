@@ -932,7 +932,7 @@ def cart_set54_benchmark(target_path,outdir):
     plt.savefig(os.path.join(outdir,'cart_set54_targets_evidence.pdf'),bbox_inches='tight')
     plt.close()
 
-def cart_set65_benchmark():
+def cart_set65_benchmark(outdir):
     set65 = {
         'NANOG':'ENSG00000111704',
         'CEACAM8':'ENSG00000124469',
@@ -963,43 +963,51 @@ def cart_set65_benchmark():
         'SLC22A12':'ENSG00000197891',
         'RBMXL2':'ENSG00000170748',
         'KLK3':'ENSG00000142515',
-        'KLK2',
-        'FCRL1',
-        'CACNG3',
-        'UPK3B',
-        'FCRLA',
-        'DCLK2',
-        'IZUMO4',
-        'MUC12',
-        'HEPACAM',
-        'BPI',
-        'ATP6V0A4',
-        'HMMR',
-        'SLC45A3',
-        'SLC4A1',
-        'UPK1A'
-        'CD79B',
-        'CD27',
-        'ADGRV1',
-        'HERC5',
-        'CD37',
-        'CD2',
-        'C3AR1',
-        'SLC7A3',
-        'FASLG',
-        'NGB',
-        'CELSR3',
-        'CD3G',
-        'CEACAM3',
-        'TNFRSF13C',
-        'CD72',
-        'SLC46A2',
-        'MS4A8',
-        'CD79A',
-        'CD3D',
-        'CCR2',
-        'CD83',
+        'KLK2':'ENSG00000167751',
+        'FCRL1':'ENSG00000163534',
+        'CACNG3':'ENSG00000006116',
+        'UPK3B':'ENSG00000243566',
+        'FCRLA':'ENSG00000132185',
+        'DCLK2':'ENSG00000170390',
+        'IZUMO4':'ENSG00000099840',
+        'MUC12':'ENSG00000205277',
+        'HEPACAM':'ENSG00000165478',
+        'BPI':'ENSG00000101425',
+        'ATP6V0A4':'ENSG00000105929',
+        'HMMR':'ENSG00000072571',
+        'SLC45A3':'ENSG00000158715',
+        'SLC4A1':'ENSG00000004939',
+        'UPK1A':'ENSG00000105668',
+        'CD79B':'ENSG00000007312',
+        'CD27':'ENSG00000139193',
+        'ADGRV1':'ENSG00000164199',
+        'HERC5':'ENSG00000138646',
+        'CD37':'ENSG00000104894',
+        'CD2':'ENSG00000116824',
+        'C3AR1':'ENSG00000171860',
+        'SLC7A3':'ENSG00000165349',
+        'FASLG':'ENSG00000117560',
+        'NGB':'ENSG00000165553',
+        'CELSR3':'ENSG00000008300',
+        'CD3G':'ENSG00000160654',
+        'CEACAM3':'ENSG00000170956',
+        'TNFRSF13C':'ENSG00000159958',
+        'CD72':'ENSG00000137101',
+        'SLC46A2':'ENSG00000119457',
+        'MS4A8':'ENSG00000166959',
+        'CD79A':'ENSG00000105369',
+        'CD3D':'ENSG00000167286',
+        'CCR2':'ENSG00000121807',
+        'CD83':'ENSG00000112149',
     }
+
+    reverse = {v:k for k,v in set65.items()}
+    result = pd.read_csv(os.path.join(outdir,'full_results.txt'),sep='\t',index_col=0)
+    common = list(set(result.index).intersection(set(set65.values())))
+    result_set65 = result.loc[common,:]
+    result_set65['symbol'] = result_set65.index.map(reverse).values
+    result_set65.to_csv(os.path.join(outdir,'cart_set65_targets.txt'))
+
 
 '''main program starts'''
 
@@ -1072,6 +1080,7 @@ def main(args):
         diagnose_2d(outdir)
         diagnose_3d(outdir)
         cart_set54_benchmark('cart_targets.txt',outdir)
+        cart_set65_benchmark(outdir)
 
 
 
