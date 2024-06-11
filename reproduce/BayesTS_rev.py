@@ -932,6 +932,25 @@ def cart_set54_benchmark(target_path,outdir):
     plt.savefig(os.path.join(outdir,'cart_set54_targets_evidence.pdf'),bbox_inches='tight')
     plt.close()
 
+def draw_PR(y_true,y_pred,outdir):
+    precision,recall,_ = precision_recall_curve(y_true,y_pred,pos_label=1)
+    area_PR = auc(recall,precision)
+    baseline = np.sum(np.array(y_true) == 1) / len(y_true)
+
+    plt.figure()
+    lw = 2
+    plt.plot(recall,precision, color='darkorange',
+            lw=lw, label='PR curve (area = %0.2f)' % area_PR)
+    plt.plot([0, 1], [baseline, baseline], color='navy', lw=lw, linestyle='--')
+    plt.xlim([0.0, 1.0])
+    plt.ylim([0.0, 1.05])
+    plt.xlabel('Recall')
+    plt.ylabel('Precision')
+    plt.title('PR curve example')
+    plt.legend(loc="lower right")
+    plt.savefig(os.path.join(outdir,'cart_set65_aupr.pdf'),bbox_inches='tight')
+    plt.close()
+
 def cart_set65_benchmark(outdir):
     set65 = {
         'NANOG':'ENSG00000111704',
@@ -1003,10 +1022,19 @@ def cart_set65_benchmark(outdir):
 
     reverse = {v:k for k,v in set65.items()}
     result = pd.read_csv(os.path.join(outdir,'full_results.txt'),sep='\t',index_col=0)
+
+    # write out
     common = list(set(result.index).intersection(set(set65.values())))
     result_set65 = result.loc[common,:]
     result_set65['symbol'] = result_set65.index.map(reverse).values
-    result_set65.to_csv(os.path.join(outdir,'cart_set65_targets.txt'))
+    result_set65.to_csv(os.path.join(outdir,'cart_set65_targets.txt'),sep='\t')
+
+    # aupr
+    result['label'] = [1 if item else 0 for item in result.index.isin(set(set65.values()))]
+    result.to_csv(os.path.join(outdir,'result_aupr.txt'),sep='\t')
+    draw_PR(result['label'].values,1-result['mean_sigma'].values,outdir)
+
+
 
 
 '''main program starts'''
