@@ -876,7 +876,7 @@ def train_single(model,guide,name,*args):
         return None
 
 # diagnose
-def diagnose_2d(outdir,ylim=(-1,200)):
+def diagnose_2d(ylim=(-1,200)):
     df = pd.read_csv(os.path.join(outdir,'full_results.txt'),sep='\t',index_col=0)
     fig,ax = plt.subplots()
     im = ax.scatter(df['X_mean'],df['Y_mean'],c=df['mean_sigma'],s=0.5**2,cmap='viridis')
@@ -887,7 +887,7 @@ def diagnose_2d(outdir,ylim=(-1,200)):
     plt.savefig(os.path.join(outdir,'diagnosis_2d.pdf'),bbox_inches='tight')
     plt.close()
 
-def diagnose_3d(outdir):
+def diagnose_3d():
     result = pd.read_csv(os.path.join(outdir,'full_results.txt'),sep='\t',index_col=0)
     result = result.loc[result['Y_mean']<=1500,:]
     sigma = result['mean_sigma'].values
@@ -906,7 +906,7 @@ def diagnose_3d(outdir):
     plt.savefig(os.path.join(outdir,'diagnosis_3d.pdf'),bbox_inches='tight')
     plt.close()
 
-def cart_set54_benchmark(target_path,outdir):
+def cart_set54_evaluation(target_path):
     target = pd.read_csv(target_path,sep='\t',index_col=0)
     mapping = {e:g for g,e in target['Ensembl ID'].to_dict().items()}
     target = target.loc[target['Category']=='in clinical trials',:]['Ensembl ID'].tolist()
@@ -932,27 +932,51 @@ def cart_set54_benchmark(target_path,outdir):
     plt.savefig(os.path.join(outdir,'cart_set54_targets_evidence.pdf'),bbox_inches='tight')
     plt.close()
 
-def draw_PR(y_true,y_pred,outdir):
-    precision,recall,_ = precision_recall_curve(y_true,y_pred,pos_label=1)
-    area_PR = auc(recall,precision)
-    baseline = np.sum(np.array(y_true) == 1) / len(y_true)
-
+def draw_PR(y_true,y_preds,outdir,outname):
     plt.figure()
-    lw = 2
-    plt.plot(recall,precision, color='darkorange',
-            lw=lw, label='PR curve (area = %0.2f)' % area_PR)
-    plt.plot([0, 1], [baseline, baseline], color='navy', lw=lw, linestyle='--')
+    baseline = np.sum(np.array(y_true) == 1) / len(y_true)
+    for label,y_pred in y_preds.items():
+        precision,recall,_ = precision_recall_curve(y_true,y_pred,pos_label=1)
+        area_PR = auc(recall,precision)
+        lw = 1
+        plt.plot(recall,precision,lw=lw, label='{} (area = {})'.format(label,round(area_PR,2)))
+        plt.plot([0, 1], [baseline, baseline], color='navy', lw=lw, linestyle='--')
     plt.xlim([0.0, 1.0])
-    plt.ylim([0.0, 1.05])
+    plt.ylim([0.0, 1.0])
     plt.xlabel('Recall')
     plt.ylabel('Precision')
     plt.title('PR curve example')
-    plt.legend(loc="lower right")
-    plt.savefig(os.path.join(outdir,'cart_set65_aupr.pdf'),bbox_inches='tight')
+    plt.legend(loc="upper right")
+    plt.savefig(os.path.join(outdir,outname),bbox_inches='tight')
     plt.close()
 
 
+def benchmark_gs():
+    result = pd.read_csv(os.path.join(outdir,'full_results.txt'),sep='\t',index_col=0)
+    gs = pd.read_csv('gold_standard.txt',sep='\t')['ensg'].values.tolist()
+    result['label'] = [True if item in gs else False for item in result.index]
 
+    hpa = pd.read_csv('proteinatlas.tsv',sep='\t').loc[:,['Ensembl','RNA tissue specificity score']]
+    hpa = hpa.loc[hpa['RNA tissue specificity score'].notna(),:]
+    mapping = {ensg:score for ensg,score in zip(hpa['Ensembl'].values,hpa['RNA tissue specificity score'].values)}
+    result['specificity_score'] = result.index.map(mapping).values
+
+    # against XYZ
+    y_preds = {
+        'BayesTS':np.negative(result['mean_sigma'].values),
+        'RNA TPM':np.negative(result['Y_mean'].values),
+        'tissue dist':np.negative(result['X_mean'].values),
+        'protein stain':result['Z_mean'].values
+    }
+    draw_PR(result['label'].values,y_preds,outdir,'PR_curve_versus_xyz.pdf')
+
+    # against hpa reported score
+    result = result.loc[result['specificity_score'].notna(),:]
+    y_preds = {
+        'BayesTS':np.negative(result['mean_sigma'].values),
+        'HPA reported specificity':result['specificity_score'].values,
+    }
+    draw_PR(result['label'].values,y_preds,outdir,'PR_curve_versus_hpa_specificity.pdf')
 
 '''main program starts'''
 
@@ -1022,9 +1046,10 @@ def main(args):
         while not os.path.exists(os.path.join(outdir,'elbo_loss.pdf')):
             pyro.clear_param_store()
             train_and_infer(model,guide,X,Y,Z,weights,lambda_rate,True,w_x,w_y,w_z)
-        diagnose_2d(outdir)
-        diagnose_3d(outdir)
-        cart_set54_benchmark('cart_targets.txt',outdir)
+        diagnose_2d()
+        diagnose_3d()
+        cart_set54_evaluation('cart_targets.txt')
+        benchmark_gs()
 
 
 
