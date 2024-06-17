@@ -132,123 +132,49 @@ mpl.rcParams['font.family'] = 'Arial'
 #     repr_aupr = np.nanmean(result['aupr'].values)
 #     dic[cutoff] = ((repr_spearman,repr_aupr))
 
-# curate gold standard
-set65 = {
-        'NANOG':'ENSG00000111704',
-        'CEACAM8':'ENSG00000124469',
-        'TSPAN16':'ENSG00000130167',
-        'SLC13A5':'ENSG00000141485',
-        'GLRB':'ENSG00000109738',
-        'DYRK4':'ENSG00000010219',
-        'KCNN4':'ENSG00000104783',
-        'SV2C':'ENSG00000122012',
-        'SIGLEC8':'ENSG00000105366',
-        'RBMXL3':'ENSG00000175718',
-        'HIST1H1T':'ENSG00000187475',
-        'CCR8':'ENSG00000179934',
-        'CCNB3':'ENSG00000147082',
-        'ALPPL2':'ENSG00000163286',
-        'ZP2':'ENSG00000103310',
-        'OTUB2':'ENSG00000089723',
-        'LILRA4':'ENSG00000239961',
-        'GRM2':'ENSG00000164082',
-        'PSG1':'ENSG00000231924',
-        'NBPF3':'ENSG00000142794',
-        'GYPA':'ENSG00000170180',
-        'ALPP':'ENSG00000163283',
-        'SPATA19':'ENSG00000166118',
-        'SLC6A11':'ENSG00000132164',
-        'SLC34A1':'ENSG00000131183',
-        'SLC2A14':'ENSG00000173262',
-        'SLC22A12':'ENSG00000197891',
-        'RBMXL2':'ENSG00000170748',
-        'KLK3':'ENSG00000142515',
-        'KLK2':'ENSG00000167751',
-        'FCRL1':'ENSG00000163534',
-        'CACNG3':'ENSG00000006116',
-        'UPK3B':'ENSG00000243566',
-        'FCRLA':'ENSG00000132185',
-        'DCLK2':'ENSG00000170390',
-        'IZUMO4':'ENSG00000099840',
-        'MUC12':'ENSG00000205277',
-        'HEPACAM':'ENSG00000165478',
-        'BPI':'ENSG00000101425',
-        'ATP6V0A4':'ENSG00000105929',
-        'HMMR':'ENSG00000072571',
-        'SLC45A3':'ENSG00000158715',
-        'SLC4A1':'ENSG00000004939',
-        'UPK1A':'ENSG00000105668',
-        'CD79B':'ENSG00000007312',
-        'CD27':'ENSG00000139193',
-        'ADGRV1':'ENSG00000164199',
-        'HERC5':'ENSG00000138646',
-        'CD37':'ENSG00000104894',
-        'CD2':'ENSG00000116824',
-        'C3AR1':'ENSG00000171860',
-        'SLC7A3':'ENSG00000165349',
-        'FASLG':'ENSG00000117560',
-        'NGB':'ENSG00000165553',
-        'CELSR3':'ENSG00000008300',
-        'CD3G':'ENSG00000160654',
-        'CEACAM3':'ENSG00000170956',
-        'TNFRSF13C':'ENSG00000159958',
-        'CD72':'ENSG00000137101',
-        'SLC46A2':'ENSG00000119457',
-        'MS4A8':'ENSG00000166959',
-        'CD79A':'ENSG00000105369',
-        'CD3D':'ENSG00000167286',
-        'CCR2':'ENSG00000121807',
-        'CD83':'ENSG00000112149',
-    }
-df = pd.DataFrame(data=set65,index=['ensg']).T
-df.index.name = 'symbol'
-df.to_csv('gold_standard.txt',sep='\t')
-sys.exit('stop')
-
-# plot pr
+# using gs
 def draw_PR(y_true,y_preds,outdir):
     plt.figure()
     baseline = np.sum(np.array(y_true) == 1) / len(y_true)
-    for i,y_pred in enumerate(y_preds):
+    for label,y_pred in y_preds.items():
         precision,recall,_ = precision_recall_curve(y_true,y_pred,pos_label=1)
         area_PR = auc(recall,precision)
         lw = 1
-        plt.plot(recall,precision,lw=lw, label='PR curve {} (area = {})'.format(i,round(area_PR,2)))
+        plt.plot(recall,precision,lw=lw, label='{} (area = {})'.format(label,round(area_PR,2)))
         plt.plot([0, 1], [baseline, baseline], color='navy', lw=lw, linestyle='--')
     plt.xlim([0.0, 1.0])
-    plt.ylim([0.0, 0.15])
+    plt.ylim([0.0, 1.0])
     plt.xlabel('Recall')
     plt.ylabel('Precision')
     plt.title('PR curve example')
     plt.legend(loc="upper right")
-    plt.savefig(os.path.join(outdir,'cart_set65_aupr_customized.pdf'),bbox_inches='tight')
+    plt.savefig(os.path.join(outdir,'PR_curves_tau.pdf'),bbox_inches='tight')
     plt.close()
 
 outdir = 'output'
-result = pd.read_csv(os.path.join(outdir,'result_aupr.txt'),sep='\t',index_col=0)
-y_preds = [
-    np.negative(result['mean_sigma'].values),
-    np.negative(result['Y_mean'].values),
-    np.negative(result['X_mean'].values),
-    result['Z_mean'].values
-]
+result = pd.read_csv(os.path.join(outdir,'full_results.txt'),sep='\t',index_col=0)
+gs = pd.read_csv('gold_standard.txt',sep='\t')['ensg'].values.tolist()
+result['label'] = [True if item in gs else False for item in result.index]
+
+hpa = pd.read_csv('proteinatlas.tsv',sep='\t').loc[:,['Ensembl','RNA tissue specificity score']]
+hpa = hpa.loc[hpa['RNA tissue specificity score'].notna(),:]
+mapping = {ensg:score for ensg,score in zip(hpa['Ensembl'].values,hpa['RNA tissue specificity score'].values)}
+result['specificity_score'] = result.index.map(mapping).values
+
+# y_preds = {
+#     'BayesTS':np.negative(result['mean_sigma'].values),
+#     'RNA TPM':np.negative(result['Y_mean'].values),
+#     'tissue dist':np.negative(result['X_mean'].values),
+#     'protein stain':result['Z_mean'].values
+# }
+# draw_PR(result['label'].values,y_preds,outdir)
+
+result = result.loc[result['specificity_score'].notna(),:]
+y_preds = {
+    'BayesTS':np.negative(result['mean_sigma'].values),
+    'tau score':result['specificity_score'].values,
+}
 draw_PR(result['label'].values,y_preds,outdir)
-sys.exit('stop')
 
 
 
-# loss_df = pd.read_csv(os.path.join(outdir,'loss_df.txt'),sep='\t')
-# ylims = (0,1.0e7)
-# loss_df = loss_df.loc[loss_df['loss']<ylims[1],:]
-# plt.figure(figsize=(5, 2))
-# plt.plot(loss_df['loss'].values)
-# plt.xlabel("SVI step")
-# plt.ylabel("ELBO loss")
-# plt.savefig('loss_check.pdf',bbox_inches='tight')
-# plt.close()
-# sys.exit('stop')
-
-# result = pd.read_csv(os.path.join(outdir,'full_results.txt'),sep='\t',index_col=0)
-# sns.histplot(result['prior_sigma'])
-# plt.savefig('check.pdf',bbox_inches='tight')
-# plt.close()
