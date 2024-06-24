@@ -132,3 +132,33 @@ mpl.rcParams['font.family'] = 'Arial'
 #     repr_aupr = np.nanmean(result['aupr'].values)
 #     dic[cutoff] = ((repr_spearman,repr_aupr))
 
+# combine PR
+def draw_PR(y_true,y_preds,outdir,outname):
+    plt.figure()
+    baseline = np.sum(np.array(y_true) == 1) / len(y_true)
+    for label,y_pred in y_preds.items():
+        precision,recall,_ = precision_recall_curve(y_true,y_pred,pos_label=1)
+        area_PR = auc(recall,precision)
+        lw = 1
+        plt.plot(recall,precision,lw=lw, label='{} (area = {})'.format(label,round(area_PR,2)))
+        plt.plot([0, 1], [baseline, baseline], color='navy', lw=lw, linestyle='--')
+    plt.xlim([0.0, 1.0])
+    plt.ylim([0.0, 1.0])
+    plt.xlabel('Recall')
+    plt.ylabel('Precision')
+    plt.title('PR curve example')
+    plt.legend(loc="upper right")
+    plt.savefig(os.path.join(outdir,outname),bbox_inches='tight')
+    plt.close()
+
+y_preds = {}
+gs = pd.read_csv('gold_standard.txt',sep='\t')['ensg'].values.tolist()
+base_result = pd.read_csv(os.path.join('output_1','full_results.txt'),sep='\t',index_col=0)
+base_order = base_result.index
+for outdir in ['output_sensitivity_82','output_sensitivity_42','output_1','output_sensitivity_24']:
+    result = pd.read_csv(os.path.join(outdir,'full_results.txt'),sep='\t',index_col=0).loc[base_order,:]
+    result['label'] = [True if item in gs else False for item in result.index]
+    y_preds[outdir] = np.negative(result['mean_sigma'].values)
+draw_PR(result['label'].values,y_preds,'.','PR_curve_sensitivity_test.pdf')
+
+

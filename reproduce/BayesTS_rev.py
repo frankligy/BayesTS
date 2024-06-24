@@ -312,12 +312,16 @@ def compute_z(adata,protein,dic_weights):
     return Z,adata,uids
 
 '''model definition'''
-def model_X_Y(X,Y,weights,train,w_x,w_y):
+def model_X_Y(X,Y,weights,train,w_x,w_y,prior_alpha,prior_beta):
+    # now X is counts referenced to 25, but here we need proportion
+    constant = torch.tensor(25.,device=device)
+    X = X / constant
+    # now continue
     subsample_size = 10
-    a = torch.tensor(2.,device=device)
-    b = torch.tensor(2.,device=device)
+    a = torch.tensor(prior_alpha,device=device)
+    b = torch.tensor(prior_beta,device=device)
     sigma = pyro.sample('sigma',dist.Beta(a,b).expand([n]).to_event(1))
-    a = torch.tensor(10.,device=device)
+    a = torch.tensor(1.0/lambda_rate,device=device)
     b = torch.tensor(1.,device=device)
     beta_y = pyro.sample('beta_y',dist.Gamma(a,b))
     a = torch.tensor(25.,device=device)
@@ -325,7 +329,7 @@ def model_X_Y(X,Y,weights,train,w_x,w_y):
     beta_x = pyro.sample('beta_x',dist.Gamma(a,b))
     a = torch.tensor(50.,device=device)
     total = pyro.sample('total',dist.Binomial(a,weights).expand([t]).to_event(1))
-    scaled_X = torch.round(X * total.unsqueeze(-1))
+
     if train:
         with pyro.poutine.scale(scale=w_x), pyro.plate('data_X',t,subsample_size=subsample_size) as ind:
             ind = ind.to(device=device)
@@ -333,18 +337,20 @@ def model_X_Y(X,Y,weights,train,w_x,w_y):
         with pyro.poutine.scale(scale=w_y), pyro.plate('data_Y',s,subsample_size=subsample_size) as ind:
             ind = ind.to(device=device)
             nc = pyro.sample('nc',dist.LogNormal(beta_y*sigma,0.5).expand([subsample_size,n]).to_event(1),obs=Y.index_select(0,ind))
+
     else:
         with pyro.poutine.scale(scale=w_x), pyro.plate('data_X',t):
             c = pyro.sample('c',dist.Poisson(beta_x*sigma).expand([t,n]).to_event(1),obs=scaled_X)
         with pyro.poutine.scale(scale=w_y), pyro.plate('data_Y',s):
             nc = pyro.sample('nc',dist.LogNormal(beta_y*sigma,0.5).expand([s,n]).to_event(1),obs=Y)
+
     return {'c':c,'nc':nc}
 
-def guide_X_Y(X,Y,weights,train,w_x,w_y):
-    alpha = pyro.param('alpha',lambda:torch.tensor(np.full(n,2.0),device=device),constraint=constraints.positive)
-    beta = pyro.param('beta',lambda:torch.tensor(np.full(n,2.0),device=device),constraint=constraints.positive)
+def guide_X_Y(X,Y,weights,train,w_x,w_y,prior_alpha,prior_beta):
+    alpha = pyro.param('alpha',lambda:torch.tensor(np.full(n,prior_alpha),device=device),constraint=constraints.positive)
+    beta = pyro.param('beta',lambda:torch.tensor(np.full(n,prior_beta),device=device),constraint=constraints.positive)
     sigma = pyro.sample('sigma',dist.Beta(alpha,beta).expand([n]).to_event(1))
-    a = torch.tensor(10.,device=device)
+    a = torch.tensor(1.0/lambda_rate,device=device)
     b = torch.tensor(1.,device=device)
     beta_y = pyro.sample('beta_y',dist.Gamma(a,b))
     a = torch.tensor(25.,device=device)
@@ -353,44 +359,54 @@ def guide_X_Y(X,Y,weights,train,w_x,w_y):
     total = pyro.sample('total',dist.Binomial(50,weights).expand([t]).to_event(1))
     return {'sigma':sigma}
 
-
-def model_Y_Z(Y,Z,train):
-    subsample_size=10
-    a = torch.tensor(2.,device=device)
-    b = torch.tensor(2.,device=device)
+def model_Y_Z(Y,Z,train,prior_alpha,prior_beta):
+    # now X is counts referenced to 25, but here we need proportion
+    constant = torch.tensor(25.,device=device)
+    X = X / constant
+    # now continue
+    subsample_size = 10
+    a = torch.tensor(prior_alpha,device=device)
+    b = torch.tensor(prior_beta,device=device)
     sigma = pyro.sample('sigma',dist.Beta(a,b).expand([n]).to_event(1))
-    a = torch.tensor(10.,device=device)
+    a = torch.tensor(1.0/lambda_rate,device=device)
     b = torch.tensor(1.,device=device)
     beta_y = pyro.sample('beta_y',dist.Gamma(a,b))
+
     high_prob = 2./3. * sigma
     medium_prob = 1./3. * sigma
-    low_prob = 2./3. * (1-sigma)
-    not_prob = 1./3. * (1-sigma)
+    low_prob = 1./3. * (1-sigma)
+    not_prob = 2./3. * (1-sigma)
     prob = torch.stack([high_prob,medium_prob,low_prob,not_prob],axis=0).T   # n * p
     if train:
-        with pyro.poutine.scale(scale=1/5000), pyro.plate('data_Y',s,subsample_size=subsample_size) as ind:
+
+        with pyro.poutine.scale(scale=w_y), pyro.plate('data_Y',s,subsample_size=subsample_size) as ind:
             ind = ind.to(device=device)
             nc = pyro.sample('nc',dist.LogNormal(beta_y*sigma,0.5).expand([subsample_size,n]).to_event(1),obs=Y.index_select(0,ind))
-        with pyro.poutine.scale(scale=1), pyro.plate('data_Z',p,subsample_size=subsample_size) as ind:
+        with pyro.poutine.scale(scale=w_z), pyro.plate('data_Z',p,subsample_size=subsample_size) as ind:
             ind = ind.to(device=device)
             pc = pyro.sample('pc',dist.Categorical(prob).expand([subsample_size,n]).to_event(1),obs=Z.index_select(0,ind))
     else:
-        with pyro.poutine.scale(scale=1/5000), pyro.plate('data_Y',s):
+
+        with pyro.poutine.scale(scale=w_y), pyro.plate('data_Y',s):
             nc = pyro.sample('nc',dist.LogNormal(beta_y*sigma,0.5).expand([s,n]).to_event(1),obs=Y)
-        with pyro.poutine.scale(scale=1), pyro.plate('data_Z',p):
+        with pyro.poutine.scale(scale=w_z), pyro.plate('data_Z',p):
             pc = pyro.sample('pc',dist.Categorical(prob).expand([p,n]).to_event(1),obs=Z)
     return {'nc':nc,'pc':pc}
 
-def guide_Y_Z(Y,Z,train):
-    alpha = pyro.param('alpha',lambda:torch.tensor(np.full(n,2.0),device=device),constraint=constraints.positive)
-    beta = pyro.param('beta',lambda:torch.tensor(np.full(n,2.0),device=device),constraint=constraints.positive)
+def guide_Y_Z(Y,Z,train,prior_alpha,prior_beta):
+    alpha = pyro.param('alpha',lambda:torch.tensor(np.full(n,prior_alpha),device=device),constraint=constraints.positive)
+    beta = pyro.param('beta',lambda:torch.tensor(np.full(n,prior_beta),device=device),constraint=constraints.positive)
     sigma = pyro.sample('sigma',dist.Beta(alpha,beta).expand([n]).to_event(1))
-    a = torch.tensor(10.,device=device)
+    a = torch.tensor(25.,device=device)
     b = torch.tensor(1.,device=device)
     beta_y = pyro.sample('beta_y',dist.Gamma(a,b))
     return {'sigma':sigma}
 
-def model_X_Z(X,Z,weights,train):
+def model_X_Z(X,Z,weights,train,prior_alpha,prior_beta):
+    # now X is counts referenced to 25, but here we need proportion
+    constant = torch.tensor(25.,device=device)
+    X = X / constant
+    # now continue
     subsample_size = 10
     a = torch.tensor(2.,device=device)
     b = torch.tensor(2.,device=device)
@@ -403,24 +419,24 @@ def model_X_Z(X,Z,weights,train):
     scaled_X = torch.round(X * total.unsqueeze(-1))
     high_prob = 2./3. * sigma
     medium_prob = 1./3. * sigma
-    low_prob = 2./3. * (1-sigma)
-    not_prob = 1./3. * (1-sigma)
+    low_prob = 1./3. * (1-sigma)
+    not_prob = 2./3. * (1-sigma)
     prob = torch.stack([high_prob,medium_prob,low_prob,not_prob],axis=0).T   # n * p
     if train:
-        with pyro.poutine.scale(scale=1/875), pyro.plate('data_X',t,subsample_size=subsample_size) as ind:
+        with pyro.poutine.scale(scale=w_x), pyro.plate('data_X',t,subsample_size=subsample_size) as ind:
             ind = ind.to(device=device)
             c = pyro.sample('c',dist.Poisson(beta_x*sigma).expand([subsample_size,n]).to_event(1),obs=scaled_X.index_select(0,ind))
-        with pyro.poutine.scale(scale=1), pyro.plate('data_Z',p,subsample_size=subsample_size) as ind:
+        with pyro.poutine.scale(scale=w_z), pyro.plate('data_Z',p,subsample_size=subsample_size) as ind:
             ind = ind.to(device=device)
             pc = pyro.sample('pc',dist.Categorical(prob).expand([subsample_size,n]).to_event(1),obs=Z.index_select(0,ind))
     else:
-        with pyro.poutine.scale(scale=1/875), pyro.plate('data_X',t):
+        with pyro.poutine.scale(scale=w_x), pyro.plate('data_X',t):
             c = pyro.sample('c',dist.Poisson(beta_x*sigma).expand([t,n]).to_event(1),obs=scaled_X)
-        with pyro.poutine.scale(scale=1), pyro.plate('data_Z',p):
+        with pyro.poutine.scale(scale=w_z), pyro.plate('data_Z',p):
             pc = pyro.sample('pc',dist.Categorical(prob).expand([p,n]).to_event(1),obs=Z)
     return {'c':c,'pc':pc}
 
-def guide_X_Z(X,Z,weights,train):
+def guide_X_Z(X,Z,weights,train,prior_alpha,prior_beta):
     alpha = pyro.param('alpha',lambda:torch.tensor(np.full(n,2.0),device=device),constraint=constraints.positive)
     beta = pyro.param('beta',lambda:torch.tensor(np.full(n,2.0),device=device),constraint=constraints.positive)
     sigma = pyro.sample('sigma',dist.Beta(alpha,beta).expand([n]).to_event(1))
@@ -430,10 +446,10 @@ def guide_X_Z(X,Z,weights,train):
     total = pyro.sample('total',dist.Binomial(50,weights).expand([t]).to_event(1))
     return {'sigma':sigma}
 
-def model_Y(Y,lambda_rate,train):
+def model_Y(Y,lambda_rate,train,prior_alpha,prior_beta):
     subsample_size = 10
-    a = torch.tensor(2.,device=device)
-    b = torch.tensor(2.,device=device)
+    a = torch.tensor(prior_alpha,device=device)
+    b = torch.tensor(prior_beta,device=device)
     sigma = pyro.sample('sigma',dist.Beta(a,b).expand([n]).to_event(1))
     a = torch.tensor(1.0/lambda_rate,device=device)
     b = torch.tensor(1.,device=device)
@@ -447,23 +463,23 @@ def model_Y(Y,lambda_rate,train):
             nc = pyro.sample('nc',dist.LogNormal(beta_y*sigma,0.5).expand([s,n]).to_event(1),obs=Y)
     return {'nc':nc}   
 
-def guide_Y(Y,lambda_rate,train):
-    alpha = pyro.param('alpha',lambda:torch.tensor(np.full(n,2.0),device=device),constraint=constraints.positive)
-    beta = pyro.param('beta',lambda:torch.tensor(np.full(n,2.0),device=device),constraint=constraints.positive)
+def guide_Y(Y,lambda_rate,train,prior_alpha,prior_beta):
+    alpha = pyro.param('alpha',lambda:torch.tensor(np.full(n,prior_alpha),device=device),constraint=constraints.positive)
+    beta = pyro.param('beta',lambda:torch.tensor(np.full(n,prior_beta),device=device),constraint=constraints.positive)
     sigma = pyro.sample('sigma',dist.Beta(alpha,beta).expand([n]).to_event(1))
     a = torch.tensor(1.0/lambda_rate,device=device)
     b = torch.tensor(1.,device=device)
     beta_y = pyro.sample('beta_y',dist.Gamma(a,b))
     return {'sigma':sigma}  
 
-def model_X(X,weights,train):
+def model_X(X,weights,train,prior_alpha,prior_beta):
     # now X is counts referenced to 25, but here we need proportion
     constant = torch.tensor(25.,device=device)
     X = X / constant
     # now continue
     subsample_size = 10
-    a = torch.tensor(2.,device=device)
-    b = torch.tensor(2.,device=device)
+    a = torch.tensor(prior_alpha,device=device)
+    b = torch.tensor(prior_beta,device=device)
     sigma = pyro.sample('sigma',dist.Beta(a,b).expand([n]).to_event(1))
     a = torch.tensor(25.,device=device)
     b = torch.tensor(1.,device=device)
@@ -480,9 +496,9 @@ def model_X(X,weights,train):
             c = pyro.sample('c',dist.Poisson(beta_x*sigma).expand([t,n]).to_event(1),obs=scaled_X)
     return {'c':c}
 
-def guide_X(X,weights,train):
-    alpha = pyro.param('alpha',lambda:torch.tensor(np.full(n,2.0),device=device),constraint=constraints.positive)
-    beta = pyro.param('beta',lambda:torch.tensor(np.full(n,2.0),device=device),constraint=constraints.positive)
+def guide_X(X,weights,train,prior_alpha,prior_beta):
+    alpha = pyro.param('alpha',lambda:torch.tensor(np.full(n,prior_alpha),device=device),constraint=constraints.positive)
+    beta = pyro.param('beta',lambda:torch.tensor(np.full(n,prior_beta),device=device),constraint=constraints.positive)
     sigma = pyro.sample('sigma',dist.Beta(alpha,beta).expand([n]).to_event(1))
     a = torch.tensor(25.,device=device)
     b = torch.tensor(1.,device=device)
@@ -490,10 +506,10 @@ def guide_X(X,weights,train):
     total = pyro.sample('total',dist.Binomial(50,weights).expand([t]).to_event(1))
     return {'sigma':sigma} 
 
-def model_Z(Z,train):
+def model_Z(Z,train,prior_alpha,prior_beta):
     subsample_size = 10
-    a = torch.tensor(2.,device=device)
-    b = torch.tensor(2.,device=device)
+    a = torch.tensor(prior_alpha,device=device)
+    b = torch.tensor(prior_beta,device=device)
     sigma = pyro.sample('sigma',dist.Beta(a,b).expand([n]).to_event(1))
     high_prob = 2./3. * sigma
     medium_prob = 1./3. * sigma
@@ -509,21 +525,21 @@ def model_Z(Z,train):
             pc = pyro.sample('pc',dist.Categorical(prob).expand([p,n]).to_event(1),obs=Z)
     return {'pc':pc}  
 
-def guide_Z(Z,train):
-    alpha = pyro.param('alpha',lambda:torch.tensor(np.full(n,2.0),device=device),constraint=constraints.positive)
-    beta = pyro.param('beta',lambda:torch.tensor(np.full(n,2.0),device=device),constraint=constraints.positive)
+def guide_Z(Z,train,prior_alpha,prior_beta):
+    alpha = pyro.param('alpha',lambda:torch.tensor(np.full(n,prior_alpha),device=device),constraint=constraints.positive)
+    beta = pyro.param('beta',lambda:torch.tensor(np.full(n,prior_beta),device=device),constraint=constraints.positive)
     sigma = pyro.sample('sigma',dist.Beta(alpha,beta).expand([n]).to_event(1))
     return {'sigma':sigma}
 
 
-def model(X,Y,Z,weights,lambda_rate,train,w_x,w_y,w_z):
+def model(X,Y,Z,weights,lambda_rate,train,w_x,w_y,w_z,prior_alpha,prior_beta):
     # now X is counts referenced to 25, but here we need proportion
     constant = torch.tensor(25.,device=device)
     X = X / constant
     # now continue
     subsample_size = 10
-    a = torch.tensor(2.,device=device)
-    b = torch.tensor(2.,device=device)
+    a = torch.tensor(prior_alpha,device=device)
+    b = torch.tensor(prior_beta,device=device)
     sigma = pyro.sample('sigma',dist.Beta(a,b).expand([n]).to_event(1))
     a = torch.tensor(1.0/lambda_rate,device=device)
     b = torch.tensor(1.,device=device)
@@ -559,9 +575,9 @@ def model(X,Y,Z,weights,lambda_rate,train,w_x,w_y,w_z):
     return {'c':c,'nc':nc,'pc':pc}
 
 
-def guide(X,Y,Z,weights,lambda_rate,train,w_x,w_y,w_z):
-    alpha = pyro.param('alpha',lambda:torch.tensor(np.full(n,2.0),device=device),constraint=constraints.positive)
-    beta = pyro.param('beta',lambda:torch.tensor(np.full(n,2.0),device=device),constraint=constraints.positive)
+def guide(X,Y,Z,weights,lambda_rate,train,w_x,w_y,w_z,prior_alpha,prior_beta):
+    alpha = pyro.param('alpha',lambda:torch.tensor(np.full(n,prior_alpha),device=device),constraint=constraints.positive)
+    beta = pyro.param('beta',lambda:torch.tensor(np.full(n,prior_beta),device=device),constraint=constraints.positive)
     sigma = pyro.sample('sigma',dist.Beta(alpha,beta).expand([n]).to_event(1))
     a = torch.tensor(1.0/lambda_rate,device=device)
     b = torch.tensor(1.,device=device)
@@ -636,13 +652,21 @@ def basic_configure(X,Y,Z,weights):
     # basic configure
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     X = torch.tensor(X.T,device=device)
-    Y = torch.tensor(Y.T,device=device)
-    Z = torch.tensor(Z.T,device=device)
     n = X.shape[1]
-    s = Y.shape[0]
     t = X.shape[0]
-    p = Z.shape[0]
+    Y = torch.tensor(Y.T,device=device)
+    s = Y.shape[0]
+    
+    if Z is not None:
+        Z = torch.tensor(Z.T,device=device)
+        n = Z.shape[1]
+        p = Z.shape[0]
+    else:
+        Z = None
+        p = None
+
     weights = torch.tensor(weights,device=device)
+
     return device,X,Y,Z,n,s,t,p,weights
 
 def train_and_infer(model,guide,*args):
@@ -701,7 +725,7 @@ def train_and_infer(model,guide,*args):
 
 
 
-def train_and_infer_XY(model,guide,*args):
+def train_and_infer_ablation(model,guide,*args):
 
     adam = Adam({'lr': 0.002,'betas':(0.95,0.999)}) 
     clipped_adam = ClippedAdam({'betas':(0.95,0.999)})
@@ -712,41 +736,62 @@ def train_and_infer_XY(model,guide,*args):
     svi_sigma = samples['sigma']  # torch.Size([1000, n])
     prior_sigma = svi_sigma.data.cpu().numpy().mean(axis=0)
 
-    n_steps = 5000
-    pyro.clear_param_store()
-    svi = SVI(model, guide, adam, loss=Trace_ELBO())
-    losses = []
-    for step in tqdm(range(n_steps),total=n_steps):  
-        loss = svi.step(*args)
-        losses.append(loss)
-    plt.figure(figsize=(5, 2))
-    plt.plot(losses)
-    plt.xlabel("SVI step")
-    plt.ylabel("ELBO loss")
-    plt.savefig('elbo_loss.pdf',bbox_inches='tight')
-    plt.close()
+    try:
+        n_steps = 5000
+        pyro.clear_param_store()
+        svi = SVI(model, guide, adam, loss=Trace_ELBO())
+        losses = []
+        for step in tqdm(range(n_steps),total=n_steps):  
+            loss = svi.step(*args)
+            losses.append(loss)
+        plt.figure(figsize=(5, 2))
+        plt.plot(losses)
+        plt.xlabel("SVI step")
+        plt.ylabel("ELBO loss")
+        plt.savefig('elbo_loss.pdf',bbox_inches='tight')
+        plt.close()
 
-    with pyro.plate('samples',1000,dim=-1):
-        samples = guide(*args)
-    svi_sigma = samples['sigma']  # torch.Size([1000, n])
-    sigma = svi_sigma.data.cpu().numpy().mean(axis=0)
-    alpha = pyro.param('alpha').data.cpu().numpy()
-    beta = pyro.param('beta').data.cpu().numpy()
-    df = pd.DataFrame(index=uids,data={'mean_sigma':sigma,'alpha':alpha,'beta':beta,'prior_sigma':prior_sigma})
-    with open('X.p','rb') as f:
-        X = pickle.load(f)
-    with open('Y.p','rb') as f:
-        Y = pickle.load(f)
-    Y_mean = Y.mean(axis=1)
-    X_mean = X.mean(axis=1)
-    df['Y_mean'] = Y_mean
-    df['X_mean'] = X_mean
-    df.to_csv('full_results.txt',sep='\t')
-    diagnose('full_results.txt',output_name='pyro_full_diagnosis.pdf')
-    return svi_sigma
+        # also save the datafram
+        loss_df = pd.DataFrame(data={'step':np.arange(n_steps)+1,'loss':losses})
+        loss_df.to_csv(os.path.join(outdir,'loss_df.txt'),sep='\t',index=None)
+
+        with pyro.plate('samples',1000,dim=-1):
+            samples = guide(*args)
+        svi_sigma = samples['sigma']  # torch.Size([1000, n])
+        sigma = svi_sigma.data.cpu().numpy().mean(axis=0)
+
+        alpha = pyro.param('alpha').data.cpu().numpy()
+        beta = pyro.param('beta').data.cpu().numpy()
+        df = pd.DataFrame(index=uids,data={'mean_sigma':sigma,'alpha':alpha,'beta':beta,'prior_sigma':prior_sigma})
+        with open(os.path.join(outdir,'X.p'),'rb') as f:
+            X = pickle.load(f)
+        with open(os.path.join(outdir,'Y.p'),'rb') as f:
+            Y = pickle.load(f)
+        try:
+            with open(os.path.join(outdir,'Z.p'),'rb') as f:
+                Z = pickle.load(f)
+        except:
+            Z = None
+
+        Y_mean = Y.mean(axis=0)
+        X_mean = X.mean(axis=0)
+        if Z is not None:
+            Z_mean = Z.mean(axis=0)
+        else:
+            Z_mean = np.full(len(Y_mean),None)
+        df['Y_mean'] = Y_mean
+        df['X_mean'] = X_mean
+        df['Z_mean'] = Z_mean
+        df.to_csv(os.path.join(outdir,'full_results.txt'),sep='\t')
 
 def generate_inputs(adata,protein,dic):
-    Z,adata,uids = compute_z(adata,protein,dic)  # 13350 * 89
+    if protine is not None:
+        Z,adata,uids = compute_z(adata,protein,dic)  # 13350 * 89
+    else:
+        adata = adata
+        uids = adata.obs_names.tolist()
+        Z = None
+
     Y = compute_y(adata,uids)  # 13350 * 1228
     # derive lambda using ebayes
     median_quantiles = np.quantile(Y,0.5,axis=1)
@@ -786,49 +831,11 @@ def generate_inputs(adata,protein,dic):
     s = Y.shape[1]
     t = X.shape[1]
     weights = weighting(adata,dic,t)
+    
 
     return X,Y,Z,weights,uids,lambda_rate
 
-def generate_input_XY(adata,dic):
-    uids = adata.obs_names.tolist()
-    Y = compute_y(adata,uids) 
-    Y = np.where(Y==0,1e-5,Y)
-    X = compute_scaled_x(adata,uids)  
-    thresholded_Y = np.empty_like(Y,dtype=np.float32)
-    cond_Y = np.empty_like(Y,dtype=bool)
-    ths = []
-    for i in tqdm(range(Y.shape[0]),total=Y.shape[0]):
-        thresholded_Y[i,:], cond_Y[i,:], th = threshold(Y[i,:],'hardcode',v=0.8)
-        ths.append(th)
-    new_adata = get_thresholded_adata(adata,cond_Y)
-    raw_X = compute_x(new_adata,uids)
-    n = X.shape[0]
-    s = Y.shape[1]
-    t = X.shape[1]
-    weights = weighting(adata,dic,t)
-    with open('uids.p','wb') as f:
-        pickle.dump(uids,f)
-    with open('weights.p','wb') as f:
-        pickle.dump(weights,f)
-    with open('Y.p','wb') as f:
-        pickle.dump(Y,f)
-    with open('X.p','wb') as f:
-        pickle.dump(X,f)
-    with open('raw_X.p','wb') as f:
-        pickle.dump(raw_X, f)   
-    return X,Y,raw_X,weights,uids
 
-def basic_configure_XY(raw_X,Y,weights,uids):
-    # basic configure
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    print(device)
-    X = torch.tensor(raw_X.T,device=device)
-    Y = torch.tensor(Y.T,device=device)
-    n = X.shape[1]
-    s = Y.shape[0]
-    t = X.shape[0]
-    weights = torch.tensor(weights,device=device)
-    return device,X,Y,n,s,t,weights
 
 def load_pre_generated_inputs():
     with open('uids.p','rb') as f:
@@ -986,48 +993,58 @@ def main(args):
     dic = pd.read_csv(args.weight,sep='\t',index_col=0).to_dict()
     global n,s,t,device,uids,scale,outdir
     outdir = args.outdir
+    global prior_alpha, prior_beta
+    prior_alpha = args.prior_alpha
+    prior_beta = args.prior_beta
 
     if not os.path.exists(outdir):
-        os.mkdir(outdir)
+        os.makedirs(outdir)
 
-    if args.mode == 'XY':
-        X,Y,raw_X,weights,uids = generate_input_XY(adata,dic)
-        device,X,Y,n,s,t,weights = basic_configure_XY(raw_X,Y,weights,uids)
-        # derive w_x and w_y
-        s_x = train_single(model_X,guide_X,'X',X,weights,True)
-        s_y = train_single(model_Y,guide_Y,'Y',Y,True)
-        lis = np.array([s_x,s_y])
-        small = lis.min()
-        w_x = small / s_x
-        w_y = small / s_y
-        # run
-        svi_sigma = train_and_infer_XY(model_X_Y,guide_X_Y,X,Y,weights,True,w_x,w_y)
-    elif args.mode == 'XYZ':
-        global p
+    global p
+
+    if protein is not None:
         protein = pd.read_csv(args.protein,sep='\t')
-        X,Y,Z,weights,uids,lambda_rate = generate_inputs(adata,protein,dic)
-        device,X,Y,Z,n,s,t,p,weights = basic_configure(X,Y,Z,weights)
-        # check
-        print('device:{}'.format(device))
-        print('X:{} note: this is not percentage X shown in paper we will later scale it'.format(X.shape))
-        print('Y:{}'.format(Y.shape))
+    else:
+        protein = None
+    X,Y,Z,weights,uids,lambda_rate = generate_inputs(adata,protein,dic)
+    device,X,Y,Z,n,s,t,p,weights = basic_configure(X,Y,Z,weights)
+
+    # check
+    print('device:{}'.format(device))
+    print('X:{} note: this is not percentage X shown in paper we will later scale it'.format(X.shape))
+    print('Y:{}'.format(Y.shape))
+    if Z is not None:
         print('Z:{}'.format(Z.shape))
-        print('n:{}'.format(n))
-        print('s:{}'.format(s))
-        print('t:{}'.format(t))
+    print('n:{}'.format(n))
+    print('s:{}'.format(s))
+    print('t:{}'.format(t))
+    if Z is not None:
         print('p:{}'.format(p))
-        print('weights:{}'.format(weights.shape))
-        print('lambda_rate/beta:{}'.format(lambda_rate))
-        # derive w_x, w_y, w_z
-        s_x = train_single(model_X,guide_X,'X',X,weights,True)
-        while not os.path.exists(os.path.join(outdir,'train_single_X_done')):
-            s_x = train_single(model_X,guide_X,'X',X,weights,True) 
-        s_y = train_single(model_Y,guide_Y,'Y',Y,lambda_rate,True)
-        while not os.path.exists(os.path.join(outdir,'train_single_Y_done')):
-            s_y = train_single(model_Y,guide_Y,'Y',Y,lambda_rate,True)
-        s_z = train_single(model_Z,guide_Z,'Z',Z,True)
+    print('weights:{}'.format(weights.shape))
+    print('lambda_rate/beta:{}'.format(lambda_rate))
+
+    # derive w_x, w_y, w_z
+    s_x = train_single(model_X,guide_X,'X',X,weights,True,prior_alpha,prior_beta)
+    while not os.path.exists(os.path.join(outdir,'train_single_X_done')):
+        s_x = train_single(model_X,guide_X,'X',X,weights,True,prior_alpha,prior_beta) 
+    s_y = train_single(model_Y,guide_Y,'Y',Y,lambda_rate,True,prior_alpha,prior_beta)
+    while not os.path.exists(os.path.join(outdir,'train_single_Y_done')):
+        s_y = train_single(model_Y,guide_Y,'Y',Y,lambda_rate,True,prior_alpha,prior_beta)
+    if Z is not None:
+        s_z = train_single(model_Z,guide_Z,'Z',Z,True,prior_alpha,prior_beta)
         while not os.path.exists(os.path.join(outdir,'train_single_Z_done')):
-            s_z = train_single(model_Z,guide_Z,'Z',Z,True)
+            s_z = train_single(model_Z,guide_Z,'Z',Z,True,prior_alpha,prior_beta)
+
+    # pickle
+    with open(os.path.join(outdir,'X.p'),'wb') as f:
+        pickle.dump(X.data.cpu().numpy(),f)
+    with open(os.path.join(outdir,'Y.p'),'wb') as f:
+        pickle.dump(Y.data.cpu().numpy(),f)
+    if Z is not None:
+        with open(os.path.join(outdir,'Z.p'),'wb') as f:
+            pickle.dump(Z.data.cpu().numpy(),f)
+
+    if mode == 'XYZ':
         lis = np.array([s_x,s_y,s_z])
         small = lis.min()
         w_x = small / s_x
@@ -1035,17 +1052,65 @@ def main(args):
         w_z = small / s_z
         print(lis,small,w_x,w_y,w_z)
         # run
-        with open(os.path.join(outdir,'X.p'),'wb') as f:
-            pickle.dump(X.data.cpu().numpy(),f)
-        with open(os.path.join(outdir,'Y.p'),'wb') as f:
-            pickle.dump(Y.data.cpu().numpy(),f)
-        with open(os.path.join(outdir,'Z.p'),'wb') as f:
-            pickle.dump(Z.data.cpu().numpy(),f)
         pyro.clear_param_store()
-        train_and_infer(model,guide,X,Y,Z,weights,lambda_rate,True,w_x,w_y,w_z)
+        train_and_infer(model,guide,X,Y,Z,weights,lambda_rate,True,w_x,w_y,w_z,prior_alpha,prior_beta)
         while not os.path.exists(os.path.join(outdir,'elbo_loss.pdf')):
             pyro.clear_param_store()
-            train_and_infer(model,guide,X,Y,Z,weights,lambda_rate,True,w_x,w_y,w_z)
+            train_and_infer(model,guide,X,Y,Z,weights,lambda_rate,True,w_x,w_y,w_z,prior_alpha,prior_beta)
+        diagnose_2d()
+        diagnose_3d()
+        cart_set54_evaluation('cart_targets.txt')
+        benchmark_gs()
+
+    elif mode == 'XY':
+
+        lis = np.array([s_x,s_y])
+        small = lis.min()
+        w_x = small / s_x
+        w_y = small / s_y
+        print(lis,small,w_x,w_y)
+        # run
+        pyro.clear_param_store()
+        train_and_infer(model_X_Y,guide_X_Y,X,Y,weights,lambda_rate,True,w_x,w_y,prior_alpha,prior_beta)
+        while not os.path.exists(os.path.join(outdir,'elbo_loss.pdf')):
+            pyro.clear_param_store()
+            train_and_infer(model_X_Y,guide_X_Y,X,Y,weights,lambda_rate,True,w_x,w_y,prior_alpha,prior_beta)
+        diagnose_2d()
+        diagnose_3d()
+        cart_set54_evaluation('cart_targets.txt')
+        benchmark_gs()
+
+    elif mode == 'YZ':
+
+        lis = np.array([s_y,s_z])
+        small = lis.min()
+        w_y = small / s_y
+        w_z = small / s_z
+        print(lis,small,w_y,w_z)
+        # run
+        pyro.clear_param_store()
+        train_and_infer(model_Y_Z,guide_Y_Z,Y,Z,weights,lambda_rate,True,w_y,w_z,prior_alpha,prior_beta)
+        while not os.path.exists(os.path.join(outdir,'elbo_loss.pdf')):
+            pyro.clear_param_store()
+            train_and_infer(model_Y_Z,guide_Y_Z,Y,Z,weights,lambda_rate,True,w_y,w_z,prior_alpha,prior_beta)
+        diagnose_2d()
+        diagnose_3d()
+        cart_set54_evaluation('cart_targets.txt')
+        benchmark_gs()
+
+    elif mode == 'XZ':
+
+        lis = np.array([s_x,s_z])
+        small = lis.min()
+        w_x = small / s_x
+        w_z = small / s_z
+        print(lis,small,w_x,w_z)
+        # run
+        pyro.clear_param_store()
+        train_and_infer(model_X_Z,guide_X_Z,X,Z,weights,True,w_x,w_z,prior_alpha,prior_beta)
+        while not os.path.exists(os.path.join(outdir,'elbo_loss.pdf')):
+            pyro.clear_param_store()
+            train_and_infer(model_X_Z,guide_X_Z,X,Z,weights,True,w_x,w_z,prior_alpha,prior_beta)
         diagnose_2d()
         diagnose_3d()
         cart_set54_evaluation('cart_targets.txt')
@@ -1060,10 +1125,16 @@ if __name__ == '__main__':
     parser.add_argument('--input',type=str,default='',help='path to the h5ad file')
     parser.add_argument('--weight',type=str,default='',help='path to a txt file with tissue and weights that you want to change')
     parser.add_argument('--mode',type=str,default='XYZ',help='XYZ use full model, XY use only RNA model')
-    parser.add_argument('--protein',type=str,default='',help='path to the protein info downloaded from Synapse')
+    parser.add_argument('--protein',type=str,default=None,help='path to the protein info downloaded from Synapse')
     parser.add_argument('--outdir',type=str,default='.',help='path to the output directory')
+    parser.add_argument('--prior_alpha',type=float,default=2.0,help='alpha for the beta prior')
+    parser.add_argument('--prior_beta',type=float,default=2.0,help='beta for the beta prior')
     args = parser.parse_args()
     main(args)
+
+    '''
+    ./BayesTS_rev.py --input gtex_gene_subsample.h5ad --weight weights.txt --outdir output_sensitivity_82 --protein normal_tissue.tsv --prior_alpha 8.0 --prior_beta 2.0
+    '''
 
 
 
