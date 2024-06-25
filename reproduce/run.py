@@ -10,6 +10,9 @@ import matplotlib as mpl
 from scipy.stats import pearsonr
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.metrics import precision_recall_curve,auc,roc_curve,accuracy_score
+import pickle
+import pyro.distributions as dist
+import torch
 
 mpl.rcParams['pdf.fonttype'] = 42
 mpl.rcParams['ps.fonttype'] = 42
@@ -132,33 +135,94 @@ mpl.rcParams['font.family'] = 'Arial'
 #     repr_aupr = np.nanmean(result['aupr'].values)
 #     dic[cutoff] = ((repr_spearman,repr_aupr))
 
-# combine PR
-def draw_PR(y_true,y_preds,outdir,outname):
-    plt.figure()
-    baseline = np.sum(np.array(y_true) == 1) / len(y_true)
-    for label,y_pred in y_preds.items():
-        precision,recall,_ = precision_recall_curve(y_true,y_pred,pos_label=1)
-        area_PR = auc(recall,precision)
-        lw = 1
-        plt.plot(recall,precision,lw=lw, label='{} (area = {})'.format(label,round(area_PR,2)))
-        plt.plot([0, 1], [baseline, baseline], color='navy', lw=lw, linestyle='--')
-    plt.xlim([0.0, 1.0])
-    plt.ylim([0.0, 1.0])
-    plt.xlabel('Recall')
-    plt.ylabel('Precision')
-    plt.title('PR curve example')
-    plt.legend(loc="upper right")
-    plt.savefig(os.path.join(outdir,outname),bbox_inches='tight')
+# # combine PR
+# def draw_PR(y_true,y_preds,outdir,outname):
+#     plt.figure()
+#     baseline = np.sum(np.array(y_true) == 1) / len(y_true)
+#     for label,y_pred in y_preds.items():
+#         precision,recall,_ = precision_recall_curve(y_true,y_pred,pos_label=1)
+#         area_PR = auc(recall,precision)
+#         lw = 1
+#         plt.plot(recall,precision,lw=lw, label='{} (area = {})'.format(label,round(area_PR,2)))
+#         plt.plot([0, 1], [baseline, baseline], color='navy', lw=lw, linestyle='--')
+#     plt.xlim([0.0, 1.0])
+#     plt.ylim([0.0, 1.0])
+#     plt.xlabel('Recall')
+#     plt.ylabel('Precision')
+#     plt.title('PR curve example')
+#     plt.legend(loc="upper right")
+#     plt.savefig(os.path.join(outdir,outname),bbox_inches='tight')
+#     plt.close()
+
+# y_preds = {}
+# gs = pd.read_csv('gold_standard.txt',sep='\t')['ensg'].values.tolist()
+# base_result = pd.read_csv(os.path.join('output_1','full_results.txt'),sep='\t',index_col=0)
+# base_order = base_result.index
+# for outdir in ['output_sensitivity_82','output_sensitivity_42','output_1','output_sensitivity_24']:
+#     result = pd.read_csv(os.path.join(outdir,'full_results.txt'),sep='\t',index_col=0).loc[base_order,:]
+#     result['label'] = [True if item in gs else False for item in result.index]
+#     y_preds[outdir] = np.negative(result['mean_sigma'].values)
+# draw_PR(result['label'].values,y_preds,'.','PR_curve_sensitivity_test.pdf')
+
+
+# prior and posterior check
+def prior_posterior_check(uid,outdir,lambda_rate):
+    full_result = pd.read_csv(os.path.join(outdir,'full_results.txt'),sep='\t',index_col=0)
+    index = uids.index(uid)
+    prior_sigma = full_result.loc[uid,'prior_sigma']
+    posterior_sigma = full_result.loc[uid,'mean_sigma']
+
+    # c
+    beta_x = 25
+    data = X[:,index]
+    prior = dist.Poisson(beta_x*prior_sigma).expand([t]).sample().data.cpu().numpy()
+    posterior = dist.Poisson(beta_x*posterior_sigma).expand([t]).sample().data.cpu().numpy()
+    fig,ax = plt.subplots()
+    for item in [data,prior,posterior]:
+        sns.histplot(item,ax=ax,stat='probability',alpha=0.5,bins=10)
+    plt.savefig(os.path.join(outdir,'{}_c.pdf'.format(uid)),bbox_inches='tight')
     plt.close()
 
-y_preds = {}
-gs = pd.read_csv('gold_standard.txt',sep='\t')['ensg'].values.tolist()
-base_result = pd.read_csv(os.path.join('output_1','full_results.txt'),sep='\t',index_col=0)
-base_order = base_result.index
-for outdir in ['output_sensitivity_82','output_sensitivity_42','output_1','output_sensitivity_24']:
-    result = pd.read_csv(os.path.join(outdir,'full_results.txt'),sep='\t',index_col=0).loc[base_order,:]
-    result['label'] = [True if item in gs else False for item in result.index]
-    y_preds[outdir] = np.negative(result['mean_sigma'].values)
-draw_PR(result['label'].values,y_preds,'.','PR_curve_sensitivity_test.pdf')
+    # nc
+    beta_y = 1/lambda_rate
+    data = Y[:,index]
+    prior = dist.LogNormal(beta_y*prior_sigma,0.5).expand([s]).sample().data.cpu().numpy()
+    posterior = dist.LogNormal(beta_y*posterior_sigma,0.5).expand([s]).sample().data.cpu().numpy()
+    fig,ax = plt.subplots()
+    for item in [data,prior,posterior]:
+        sns.histplot(np.log(item),ax=ax,stat='probability',bins=40,alpha=0.5)
+    plt.savefig(os.path.join(outdir,'{}_nc.pdf'.format(uid)),bbox_inches='tight')
+    plt.close()
+
+    # pc
+    data = Z[:,index]
+    probs = [torch.tensor([2/3*sigma,1/3*sigma,1/3*(1-sigma),2/3*(1-sigma)]) for sigma in [prior_sigma,posterior_sigma]]
+    prior = dist.Categorical(probs[0]).expand([p]).sample().data.cpu().numpy()
+    posterior = dist.Categorical(probs[1]).expand([p]).sample().data.cpu().numpy()
+    fig,axes = plt.subplots(ncols=3,gridspec_kw={'wspace':0.5})
+    axes = axes.flatten()
+    for i,(item,color,title) in enumerate(zip([data,prior,posterior],['#7995C4','#E5A37D','#80BE8E'],['data','prior','posterior'])): 
+        sns.histplot(item,ax=axes[i],stat='count',bins=4,alpha=0.5,facecolor=color)
+        axes[i].set_ylim([0,90])
+        axes[i].set_title(title)
+    plt.savefig(os.path.join(outdir,'{}_pc.pdf'.format(uid)),bbox_inches='tight')
+    plt.close()
+
+outdir = 'output_xyz'
+lambda_rate = 0.03356
+s = 1228
+t = 49
+p = 89
+uid = 'ENSG00000141736'  # ENSG00000111640 ENSG00000198681
+with open(os.path.join(outdir,'uids.p'),'rb') as f:
+    uids = pickle.load(f)
+with open(os.path.join(outdir,'X.p'),'rb') as f:
+    X = pickle.load(f)
+with open(os.path.join(outdir,'Y.p'),'rb') as f:
+    Y = pickle.load(f)
+with open(os.path.join(outdir,'Z.p'),'rb') as f:
+    Z = pickle.load(f)
+
+prior_posterior_check(uid,outdir,lambda_rate)
 
 
