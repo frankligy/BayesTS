@@ -681,8 +681,6 @@ def train_and_infer(model,guide,*args):
 
 
 
-
-
 def generate_inputs(adata,protein,dic):
     if protein is not None:
         Z,adata,uids = compute_z(adata,protein,dic)  # 13350 * 89
@@ -771,8 +769,8 @@ def train_single(model,guide,name,*args):
             f.write('success')
         return np.median(largest)
 
-    except:
-        return None
+    except Exception as e:
+        print(e);sys.exit('stop')
 
 # diagnose
 def diagnose_2d(ylim=(-1,200)):
@@ -916,6 +914,54 @@ def main(args):
     print('weights:{}'.format(weights.shape))
     print('ebayes_beta_y:{}'.format(ebayes_beta_y))
 
+    if mode == 'XYc':
+        from custom import generate_and_configure, model_custom, guide_custom, model_X_Y_custom, guide_X_Y_custom
+        # generate and configure input to CUSTOM
+        CUSTOM, common, order, device = generate_and_configure(uids)
+        uids = common
+        subset_X = X[:,order]
+        subset_Y = Y[:,order]
+        n = len(common)
+        s_x = train_single(model_X,guide_X,'X',subset_X,weights,True,prior_alpha,prior_beta) 
+        while not os.path.exists(os.path.join(outdir,'train_single_X_done')):
+            s_x = train_single(model_X,guide_X,'X',subset_X,weights,True,prior_alpha,prior_beta) 
+        s_y = train_single(model_Y,guide_Y,'Y',subset_Y,ebayes_beta_y,True,prior_alpha,prior_beta)
+        while not os.path.exists(os.path.join(outdir,'train_single_Y_done')):
+            s_y = train_single(model_Y,guide_Y,'Y',subset_Y,ebayes_beta_y,True,prior_alpha,prior_beta)
+        s_custom = train_single(model_custom,guide_custom,'CUSTOM',CUSTOM,device)
+        while not os.path.exists(os.path.join(outdir,'train_single_CUSTOM_done')):
+            s_custom = train_single(model_custom,guide_custom,'CUSTOM',CUSTOM,device)
+        
+        # write out
+        with open(os.path.join(outdir,'uids.p'),'wb') as f:
+            pickle.dump(uids,f)
+        with open(os.path.join(outdir,'X.p'),'wb') as f:
+            pickle.dump(subset_X.data.cpu().numpy(),f)
+        with open(os.path.join(outdir,'Y.p'),'wb') as f:
+            pickle.dump(subset_Y.data.cpu().numpy(),f)
+        with open(os.path.join(outdir,'Z.p'),'wb') as f:  # pretend CUSTOM to be Z
+            pickle.dump(CUSTOM.data.cpu().numpy(),f)
+
+        # actual infer
+        lis = np.array([s_x,s_y,s_custom])
+        small = lis.min()
+        w_x = small / s_x
+        w_y = small / s_y
+        w_custom = small / s_custom
+        print(lis,small,w_x,w_y,w_custom)
+        # run
+        pyro.clear_param_store()
+        train_and_infer(model_X_Y_custom,guide_X_Y_custom,subset_X,subset_Y,CUSTOM,weights,ebayes_beta_y,t,s,device,w_x,w_y,w_custom,prior_alpha,prior_beta)
+        while not os.path.exists(os.path.join(outdir,'elbo_loss.pdf')):
+            pyro.clear_param_store()
+            train_and_infer(model_X_Y_custom,guide_X_Y_custom,subset_X,subset_Y,CUSTOM,weights,ebayes_beta_y,t,s,device,w_x,w_y,w_custom,prior_alpha,prior_beta)
+        diagnose_2d()
+        diagnose_3d()
+        cart_set54_evaluation('cart_targets.txt')
+        benchmark_gs()
+        sys.exit('finished mode XYc')
+
+
     # derive w_x, w_y, w_z
     s_x = train_single(model_X,guide_X,'X',X,weights,True,prior_alpha,prior_beta)
     while not os.path.exists(os.path.join(outdir,'train_single_X_done')):
@@ -1010,6 +1056,8 @@ def main(args):
         diagnose_3d()
         cart_set54_evaluation('cart_targets.txt')
         benchmark_gs()
+
+
 
 
 
