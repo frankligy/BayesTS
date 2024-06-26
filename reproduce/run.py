@@ -166,7 +166,7 @@ mpl.rcParams['font.family'] = 'Arial'
 
 
 # prior and posterior check
-def prior_posterior_check(uid,outdir,lambda_rate):
+def prior_posterior_check(uid,outdir,ebayes_beta_y):
     full_result = pd.read_csv(os.path.join(outdir,'full_results.txt'),sep='\t',index_col=0)
     index = uids.index(uid)
     prior_sigma = full_result.loc[uid,'prior_sigma']
@@ -184,7 +184,7 @@ def prior_posterior_check(uid,outdir,lambda_rate):
     plt.close()
 
     # nc
-    beta_y = 1/lambda_rate
+    beta_y = ebayes_beta_y
     data = Y[:,index]
     prior = dist.LogNormal(beta_y*prior_sigma,0.5).expand([s]).sample().data.cpu().numpy()
     posterior = dist.LogNormal(beta_y*posterior_sigma,0.5).expand([s]).sample().data.cpu().numpy()
@@ -208,12 +208,12 @@ def prior_posterior_check(uid,outdir,lambda_rate):
     plt.savefig(os.path.join(outdir,'{}_pc.pdf'.format(uid)),bbox_inches='tight')
     plt.close()
 
-outdir = 'output_xyz'
-lambda_rate = 0.03356
+outdir = 'output_test'
+ebayes_beta_y = 4.301273922770753
 s = 1228
 t = 49
 p = 89
-uid = 'ENSG00000141736'  # ENSG00000111640 ENSG00000198681
+uid = 'ENSG00000111640'  #ENSG00000111640 ENSG00000198681
 with open(os.path.join(outdir,'uids.p'),'rb') as f:
     uids = pickle.load(f)
 with open(os.path.join(outdir,'X.p'),'rb') as f:
@@ -223,6 +223,6 @@ with open(os.path.join(outdir,'Y.p'),'rb') as f:
 with open(os.path.join(outdir,'Z.p'),'rb') as f:
     Z = pickle.load(f)
 
-prior_posterior_check(uid,outdir,lambda_rate)
+prior_posterior_check(uid,outdir,ebayes_beta_y)
 
 

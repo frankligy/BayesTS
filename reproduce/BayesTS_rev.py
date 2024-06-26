@@ -23,6 +23,7 @@ import numpy.ma as ma
 from sklearn.metrics import precision_recall_curve,auc,roc_curve,accuracy_score
 import argparse
 from sklearn.preprocessing import MinMaxScaler
+from sklearn.linear_model import LinearRegression
 
 import matplotlib as mpl
 mpl.rcParams['pdf.fonttype'] = 42
@@ -312,7 +313,7 @@ def compute_z(adata,protein,dic_weights):
     return Z,adata,uids
 
 '''model definition'''
-def model_X_Y(X,Y,weights,lambda_rate,train,w_x,w_y,prior_alpha,prior_beta):
+def model_X_Y(X,Y,weights,ebayes_beta_y,train,w_x,w_y,prior_alpha,prior_beta):
     # now X is counts referenced to 25, but here we need proportion
     constant = torch.tensor(25.,device=device)
     X = X / constant
@@ -321,7 +322,7 @@ def model_X_Y(X,Y,weights,lambda_rate,train,w_x,w_y,prior_alpha,prior_beta):
     a = torch.tensor(prior_alpha,device=device)
     b = torch.tensor(prior_beta,device=device)
     sigma = pyro.sample('sigma',dist.Beta(a,b).expand([n]).to_event(1))
-    a = torch.tensor(1.0/lambda_rate,device=device)
+    a = torch.tensor(ebayes_beta_y,device=device)
     b = torch.tensor(1.,device=device)
     beta_y = pyro.sample('beta_y',dist.Gamma(a,b))
     a = torch.tensor(25.,device=device)
@@ -347,11 +348,11 @@ def model_X_Y(X,Y,weights,lambda_rate,train,w_x,w_y,prior_alpha,prior_beta):
 
     return {'c':c,'nc':nc}
 
-def guide_X_Y(X,Y,weights,lambda_rate,train,w_x,w_y,prior_alpha,prior_beta):
+def guide_X_Y(X,Y,weights,ebayes_beta_y,train,w_x,w_y,prior_alpha,prior_beta):
     alpha = pyro.param('alpha',lambda:torch.tensor(np.full(n,prior_alpha),device=device),constraint=constraints.positive)
     beta = pyro.param('beta',lambda:torch.tensor(np.full(n,prior_beta),device=device),constraint=constraints.positive)
     sigma = pyro.sample('sigma',dist.Beta(alpha,beta).expand([n]).to_event(1))
-    a = torch.tensor(1.0/lambda_rate,device=device)
+    a = torch.tensor(ebayes_beta_y,device=device)
     b = torch.tensor(1.,device=device)
     beta_y = pyro.sample('beta_y',dist.Gamma(a,b))
     a = torch.tensor(25.,device=device)
@@ -360,14 +361,14 @@ def guide_X_Y(X,Y,weights,lambda_rate,train,w_x,w_y,prior_alpha,prior_beta):
     total = pyro.sample('total',dist.Binomial(50,weights).expand([t]).to_event(1))
     return {'sigma':sigma}
 
-def model_Y_Z(Y,Z,lambda_rate,train,w_y,w_z,prior_alpha,prior_beta):
+def model_Y_Z(Y,Z,ebayes_beta_y,train,w_y,w_z,prior_alpha,prior_beta):
 
     # now continue
     subsample_size = 10
     a = torch.tensor(prior_alpha,device=device)
     b = torch.tensor(prior_beta,device=device)
     sigma = pyro.sample('sigma',dist.Beta(a,b).expand([n]).to_event(1))
-    a = torch.tensor(1.0/lambda_rate,device=device)
+    a = torch.tensor(ebayes_beta_y,device=device)
     b = torch.tensor(1.,device=device)
     beta_y = pyro.sample('beta_y',dist.Gamma(a,b))
 
@@ -392,11 +393,11 @@ def model_Y_Z(Y,Z,lambda_rate,train,w_y,w_z,prior_alpha,prior_beta):
             pc = pyro.sample('pc',dist.Categorical(prob).expand([p,n]).to_event(1),obs=Z)
     return {'nc':nc,'pc':pc}
 
-def guide_Y_Z(Y,Z,lambda_rate,train,w_y,w_z,prior_alpha,prior_beta):
+def guide_Y_Z(Y,Z,ebayes_beta_y,train,w_y,w_z,prior_alpha,prior_beta):
     alpha = pyro.param('alpha',lambda:torch.tensor(np.full(n,prior_alpha),device=device),constraint=constraints.positive)
     beta = pyro.param('beta',lambda:torch.tensor(np.full(n,prior_beta),device=device),constraint=constraints.positive)
     sigma = pyro.sample('sigma',dist.Beta(alpha,beta).expand([n]).to_event(1))
-    a = torch.tensor(1.0/lambda_rate,device=device)
+    a = torch.tensor(ebayes_beta_y,device=device)
     b = torch.tensor(1.,device=device)
     beta_y = pyro.sample('beta_y',dist.Gamma(a,b))
     return {'sigma':sigma}
@@ -445,12 +446,12 @@ def guide_X_Z(X,Z,weights,train,w_x,w_z,prior_alpha,prior_beta):
     total = pyro.sample('total',dist.Binomial(50,weights).expand([t]).to_event(1))
     return {'sigma':sigma}
 
-def model_Y(Y,lambda_rate,train,prior_alpha,prior_beta):
+def model_Y(Y,ebayes_beta_y,train,prior_alpha,prior_beta):
     subsample_size = 10
     a = torch.tensor(prior_alpha,device=device)
     b = torch.tensor(prior_beta,device=device)
     sigma = pyro.sample('sigma',dist.Beta(a,b).expand([n]).to_event(1))
-    a = torch.tensor(1.0/lambda_rate,device=device)
+    a = torch.tensor(ebayes_beta_y,device=device)
     b = torch.tensor(1.,device=device)
     beta_y = pyro.sample('beta_y',dist.Gamma(a,b))
     if train:
@@ -462,11 +463,11 @@ def model_Y(Y,lambda_rate,train,prior_alpha,prior_beta):
             nc = pyro.sample('nc',dist.LogNormal(beta_y*sigma,0.5).expand([s,n]).to_event(1),obs=Y)
     return {'nc':nc}   
 
-def guide_Y(Y,lambda_rate,train,prior_alpha,prior_beta):
+def guide_Y(Y,ebayes_beta_y,train,prior_alpha,prior_beta):
     alpha = pyro.param('alpha',lambda:torch.tensor(np.full(n,prior_alpha),device=device),constraint=constraints.positive)
     beta = pyro.param('beta',lambda:torch.tensor(np.full(n,prior_beta),device=device),constraint=constraints.positive)
     sigma = pyro.sample('sigma',dist.Beta(alpha,beta).expand([n]).to_event(1))
-    a = torch.tensor(1.0/lambda_rate,device=device)
+    a = torch.tensor(ebayes_beta_y,device=device)
     b = torch.tensor(1.,device=device)
     beta_y = pyro.sample('beta_y',dist.Gamma(a,b))
     return {'sigma':sigma}  
@@ -531,7 +532,7 @@ def guide_Z(Z,train,prior_alpha,prior_beta):
     return {'sigma':sigma}
 
 
-def model(X,Y,Z,weights,lambda_rate,train,w_x,w_y,w_z,prior_alpha,prior_beta):
+def model(X,Y,Z,weights,ebayes_beta_y,train,w_x,w_y,w_z,prior_alpha,prior_beta):
     # now X is counts referenced to 25, but here we need proportion
     constant = torch.tensor(25.,device=device)
     X = X / constant
@@ -540,7 +541,7 @@ def model(X,Y,Z,weights,lambda_rate,train,w_x,w_y,w_z,prior_alpha,prior_beta):
     a = torch.tensor(prior_alpha,device=device)
     b = torch.tensor(prior_beta,device=device)
     sigma = pyro.sample('sigma',dist.Beta(a,b).expand([n]).to_event(1))
-    a = torch.tensor(1.0/lambda_rate,device=device)
+    a = torch.tensor(ebayes_beta_y,device=device)
     b = torch.tensor(1.,device=device)
     beta_y = pyro.sample('beta_y',dist.Gamma(a,b))
     a = torch.tensor(25.,device=device)
@@ -574,11 +575,11 @@ def model(X,Y,Z,weights,lambda_rate,train,w_x,w_y,w_z,prior_alpha,prior_beta):
     return {'c':c,'nc':nc,'pc':pc}
 
 
-def guide(X,Y,Z,weights,lambda_rate,train,w_x,w_y,w_z,prior_alpha,prior_beta):
+def guide(X,Y,Z,weights,ebayes_beta_y,train,w_x,w_y,w_z,prior_alpha,prior_beta):
     alpha = pyro.param('alpha',lambda:torch.tensor(np.full(n,prior_alpha),device=device),constraint=constraints.positive)
     beta = pyro.param('beta',lambda:torch.tensor(np.full(n,prior_beta),device=device),constraint=constraints.positive)
     sigma = pyro.sample('sigma',dist.Beta(alpha,beta).expand([n]).to_event(1))
-    a = torch.tensor(1.0/lambda_rate,device=device)
+    a = torch.tensor(ebayes_beta_y,device=device)
     b = torch.tensor(1.,device=device)
     beta_y = pyro.sample('beta_y',dist.Gamma(a,b))
     a = torch.tensor(25.,device=device)
@@ -691,26 +692,33 @@ def generate_inputs(adata,protein,dic):
         Z = None
 
     Y = compute_y(adata,uids)  # 13350 * 1228
+
     # derive lambda using ebayes
-    median_quantiles = np.quantile(Y,0.5,axis=1)
-    a = median_quantiles / 0.5
-    a = a[a>0]
-    a = np.sort(a)
-    covered = np.arange(len(a)) / len(a)
-    df = pd.DataFrame(data={'a':a,'covered':covered})
-    cutoff = df.loc[df['covered']<=0.95,:].iloc[-1,0]
-    a = a[a<=cutoff]  
+    mean_each_gene = np.mean(Y,axis=1)
+    quantiles = np.linspace(0,1,100)
+    quantiles_of_mean = np.quantile(mean_each_gene,quantiles)
+    y_var = quantiles_of_mean
+    y_var = np.array([1e-5 if item == 0 else item for item in y_var])
+    sigma = 0.5
+    y_var_adjust = np.log(y_var) - (sigma ** 2 / 2)
+    x_var = np.linspace(0,1,100)
+
+    y_var_adjust = y_var_adjust[5:95].reshape(-1,1)
+    x_var = x_var[5:95].reshape(-1,1)
+    model = LinearRegression()
+    model.fit(x_var,y_var_adjust)
+    coefficient = model.coef_[0][0]
+    intercept = model.intercept_[0]
+
     fig,ax = plt.subplots()
-    sns.histplot(a,ax=ax,stat='density')
-    lambda_rate = 1/np.mean(a)
-    from scipy.stats import expon,gamma
-    x = np.linspace(0, cutoff, 1000)
-    pdf = expon.pdf(x, scale=1/lambda_rate)
-    pdf = gamma.pdf(x,a=1,scale=1/lambda_rate)
-    ax.plot(x,pdf)
-    ax.set_title('optimal lambda is {}\nMean is {}'.format(round(lambda_rate,2),round(1/lambda_rate,2)))
-    plt.savefig(os.path.join(outdir,'eBayes_decide_beta_y.pdf'),bbox_inches='tight')
+    ax.scatter(x=x_var.squeeze(),y=y_var_adjust.squeeze())
+    ax.plot(x_var.squeeze(),[intercept + coefficient * item for item in x_var.squeeze()],c='black',lw=2)
+    ax.text(x=0.5,y=0,s='y={}+{}x'.format(round(intercept,2),round(coefficient,2)))
+    plt.savefig(os.path.join(outdir,'eBayes_determine_beta_y.pdf'),bbox_inches='tight')
     plt.close()
+
+    ebayes_beta_y = coefficient
+
     # continue
     Y = np.where(Y==0,1e-5,Y)
 
@@ -731,24 +739,10 @@ def generate_inputs(adata,protein,dic):
     weights = weighting(adata,dic,t)
     
 
-    return X,Y,Z,weights,uids,lambda_rate
+    return X,Y,Z,weights,uids,ebayes_beta_y
 
 
 
-def load_pre_generated_inputs():
-    with open('uids.p','rb') as f:
-        uids = pickle.load(f)
-    with open('weights.p','rb') as f:
-        weights = pickle.load(f)
-    with open('Z.p','rb') as f:
-        Z = pickle.load(f)
-    with open('Y.p','rb') as f:
-        Y = pickle.load(f)
-    with open('X.p','rb') as f:
-        X = pickle.load(f)
-    with open('raw_X.p','rb') as f:
-        raw_X = pickle.load(f)
-    return X,Y,Z,raw_X,weights,uids
 
 def train_single(model,guide,name,*args):
     adam = Adam({'lr': 0.002,'betas':(0.95,0.999)}) 
@@ -904,10 +898,9 @@ def main(args):
         protein = pd.read_csv(protein,sep='\t')
     else:
         protein = None
-    X,Y,Z,weights,uids,lambda_rate = generate_inputs(adata,protein,dic)
+    X,Y,Z,weights,uids,ebayes_beta_y = generate_inputs(adata,protein,dic)
     device,X,Y,Z,n,s,t,p,weights = basic_configure(X,Y,Z,weights)
 
-    lambda_rate = 0.1
 
     # check
     print('device:{}'.format(device))
@@ -921,15 +914,15 @@ def main(args):
     if Z is not None:
         print('p:{}'.format(p))
     print('weights:{}'.format(weights.shape))
-    print('lambda_rate/beta:{}'.format(lambda_rate))
+    print('ebayes_beta_y:{}'.format(ebayes_beta_y))
 
     # derive w_x, w_y, w_z
     s_x = train_single(model_X,guide_X,'X',X,weights,True,prior_alpha,prior_beta)
     while not os.path.exists(os.path.join(outdir,'train_single_X_done')):
         s_x = train_single(model_X,guide_X,'X',X,weights,True,prior_alpha,prior_beta) 
-    s_y = train_single(model_Y,guide_Y,'Y',Y,lambda_rate,True,prior_alpha,prior_beta)
+    s_y = train_single(model_Y,guide_Y,'Y',Y,ebayes_beta_y,True,prior_alpha,prior_beta)
     while not os.path.exists(os.path.join(outdir,'train_single_Y_done')):
-        s_y = train_single(model_Y,guide_Y,'Y',Y,lambda_rate,True,prior_alpha,prior_beta)
+        s_y = train_single(model_Y,guide_Y,'Y',Y,ebayes_beta_y,True,prior_alpha,prior_beta)
     if Z is not None:
         s_z = train_single(model_Z,guide_Z,'Z',Z,True,prior_alpha,prior_beta)
         while not os.path.exists(os.path.join(outdir,'train_single_Z_done')):
@@ -955,10 +948,10 @@ def main(args):
         print(lis,small,w_x,w_y,w_z)
         # run
         pyro.clear_param_store()
-        train_and_infer(model,guide,X,Y,Z,weights,lambda_rate,True,w_x,w_y,w_z,prior_alpha,prior_beta)
+        train_and_infer(model,guide,X,Y,Z,weights,ebayes_beta_y,True,w_x,w_y,w_z,prior_alpha,prior_beta)
         while not os.path.exists(os.path.join(outdir,'elbo_loss.pdf')):
             pyro.clear_param_store()
-            train_and_infer(model,guide,X,Y,Z,weights,lambda_rate,True,w_x,w_y,w_z,prior_alpha,prior_beta)
+            train_and_infer(model,guide,X,Y,Z,weights,ebayes_beta_y,True,w_x,w_y,w_z,prior_alpha,prior_beta)
         diagnose_2d()
         diagnose_3d()
         cart_set54_evaluation('cart_targets.txt')
@@ -973,10 +966,10 @@ def main(args):
         print(lis,small,w_x,w_y)
         # run
         pyro.clear_param_store()
-        train_and_infer(model_X_Y,guide_X_Y,X,Y,weights,lambda_rate,True,w_x,w_y,prior_alpha,prior_beta)
+        train_and_infer(model_X_Y,guide_X_Y,X,Y,weights,ebayes_beta_y,True,w_x,w_y,prior_alpha,prior_beta)
         while not os.path.exists(os.path.join(outdir,'elbo_loss.pdf')):
             pyro.clear_param_store()
-            train_and_infer(model_X_Y,guide_X_Y,X,Y,weights,lambda_rate,True,w_x,w_y,prior_alpha,prior_beta)
+            train_and_infer(model_X_Y,guide_X_Y,X,Y,weights,ebayes_beta_y,True,w_x,w_y,prior_alpha,prior_beta)
         diagnose_2d()
         diagnose_3d()
         cart_set54_evaluation('cart_targets.txt')
@@ -991,10 +984,10 @@ def main(args):
         print(lis,small,w_y,w_z)
         # run
         pyro.clear_param_store()
-        train_and_infer(model_Y_Z,guide_Y_Z,Y,Z,lambda_rate,True,w_y,w_z,prior_alpha,prior_beta)
+        train_and_infer(model_Y_Z,guide_Y_Z,Y,Z,ebayes_beta_y,True,w_y,w_z,prior_alpha,prior_beta)
         while not os.path.exists(os.path.join(outdir,'elbo_loss.pdf')):
             pyro.clear_param_store()
-            train_and_infer(model_Y_Z,guide_Y_Z,Y,Z,lambda_rate,True,w_y,w_z,prior_alpha,prior_beta)
+            train_and_infer(model_Y_Z,guide_Y_Z,Y,Z,ebayes_beta_y,True,w_y,w_z,prior_alpha,prior_beta)
         diagnose_2d()
         diagnose_3d()
         cart_set54_evaluation('cart_targets.txt')
