@@ -134,6 +134,23 @@ mpl.rcParams['font.family'] = 'Arial'
 #     repr_aupr = np.nanmean(result['aupr'].values)
 #     dic[cutoff] = ((repr_spearman,repr_aupr))
 
+
+# test speed
+outdir = 'output_xyz'
+with open(os.path.join(outdir,'X.p'),'rb') as f:
+    X = pickle.load(f)
+np.savetxt('X.out',X,delimiter='\t')
+with open(os.path.join(outdir,'Y.p'),'rb') as f:
+    Y = pickle.load(f)
+np.savetxt('Y.out',Y,delimiter='\t')
+with open(os.path.join(outdir,'uids.p'),'rb') as f:
+    uids = pickle.load(f)
+with open('uids.out','w') as f:
+    for uid in uids:
+        f.write('{}\n'.format(uid))
+
+
+
 # # combine PR
 def draw_PR(y_true,y_preds,outdir,outname):
     plt.figure()
