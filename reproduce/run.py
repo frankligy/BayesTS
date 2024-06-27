@@ -136,18 +136,33 @@ mpl.rcParams['font.family'] = 'Arial'
 
 
 # test speed
-outdir = 'output_xyz'
-with open(os.path.join(outdir,'X.p'),'rb') as f:
-    X = pickle.load(f)
-np.savetxt('X.out',X,delimiter='\t')
-with open(os.path.join(outdir,'Y.p'),'rb') as f:
-    Y = pickle.load(f)
-np.savetxt('Y.out',Y,delimiter='\t')
-with open(os.path.join(outdir,'uids.p'),'rb') as f:
-    uids = pickle.load(f)
-with open('uids.out','w') as f:
-    for uid in uids:
-        f.write('{}\n'.format(uid))
+# outdir = 'output_xyz'
+# with open(os.path.join(outdir,'X.p'),'rb') as f:
+#     X = pickle.load(f)
+# np.savetxt('X.out',X,delimiter='\t')
+# with open(os.path.join(outdir,'Y.p'),'rb') as f:
+#     Y = pickle.load(f)
+# np.savetxt('Y.out',Y,delimiter='\t')
+# with open(os.path.join(outdir,'uids.p'),'rb') as f:
+#     uids = pickle.load(f)
+# with open('uids.out','w') as f:
+#     for uid in uids:
+#         f.write('{}\n'.format(uid))
+
+n = [10,50,100,200,500]
+mcmc = [16.145457983016968, 39.225778341293335, 74.17322897911072, 161.4286584854126, 428.83027958869934]
+vi = [5.572661399841309, 7.877718210220337, 12.209128618240356, 22.4102463722229, 58.071091175079346]
+fig, ax = plt.subplots()
+ax.plot(np.arange(len(n)),mcmc,marker='o',label='mcmc')
+ax.plot(np.arange(len(n)),vi,marker='o',label='vi')
+ax.legend(frameon=False)
+ax.set_xticks(np.arange(len(n)))
+ax.set_xticklabels(n)
+ax.set_xlabel('Number of genes')
+ax.set_ylabel('Time(s)')
+plt.savefig('mcmc_vi.pdf',bbox_inches='tight')
+plt.close()
+sys.exit('stop')
 
 
 
