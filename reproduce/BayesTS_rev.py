@@ -24,6 +24,7 @@ from sklearn.metrics import precision_recall_curve,auc,roc_curve,accuracy_score
 import argparse
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.linear_model import LinearRegression
+import math
 
 import matplotlib as mpl
 mpl.rcParams['pdf.fonttype'] = 42
@@ -51,6 +52,7 @@ def compute_scaled_x(adata,uids,cutoff):
         scaled_c = np.round(c * (25/total_count),0)
         x[:,i] = scaled_c
     annotated_x = pd.DataFrame(data=x,index=uids,columns=valid_tissue)
+    annotated_x.to_csv(os.path.join(outdir,'annotated_x.txt'),sep='\t')
     return x,annotated_x
 
 
@@ -240,9 +242,7 @@ def compute_z(adata,protein,dic_weights):
     for gene,sub_df in protein.groupby('Gene'):
         n.append(sub_df.shape[0])
         genes.append(gene)
-    # sns.histplot(n)
-    # plt.savefig('n_evidence.pdf',bbox_inches='tight')
-    # plt.close()
+
     uids = adata.obs_names.tolist()
     common = list(set(uids).intersection(set(genes)))  # 13350
     adata = adata[common,:]
@@ -290,6 +290,7 @@ def compute_z(adata,protein,dic_weights):
     df = pd.DataFrame(index=uids,data=count,columns=['High','Medium','Low','Not detected'])
     mean_n = np.array(n).mean()
     df = df.apply(lambda x:x/x.values.sum()*mean_n,axis=1)
+    df.to_csv(os.path.join(outdir,'annotated_z.txt'),sep='\t')
 
     total = round(mean_n,0)
     def sample_category(x):
@@ -297,7 +298,7 @@ def compute_z(adata,protein,dic_weights):
         t = 0
         d = []
         for i,v in enumerate(x.values[:-1]): # {0:high,1:medium,2:low,3:not detected}, 3 is hold off
-            n = round(v,0)
+            n = math.floor(v)
             d.append(np.repeat([i],n))
             t += n
         if total-t <= 0:
@@ -882,7 +883,8 @@ def main(args):
     global adata,dic,n,s,t,p,device,uids,outdir,prior_alpha,prior_beta,protein,mode
 
     adata = ad.read_h5ad(args.input)
-    dic = pd.read_csv(args.weight,sep='\t',index_col=0).to_dict()
+    dic = pd.read_csv(args.weight,sep='\t',index_col=0)['weight'].to_dict()
+    print(dic)
     outdir = args.outdir
     prior_alpha = args.prior_alpha
     prior_beta = args.prior_beta
