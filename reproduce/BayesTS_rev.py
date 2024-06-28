@@ -771,7 +771,7 @@ def train_single(model,guide,name,*args):
         return np.median(largest)
 
     except Exception as e:
-        print(e);sys.exit('stop')
+        print(e)
 
 # diagnose
 def diagnose_2d(ylim=(-1,200)):
@@ -884,7 +884,6 @@ def main(args):
 
     adata = ad.read_h5ad(args.input)
     dic = pd.read_csv(args.weight,sep='\t',index_col=0)['weight'].to_dict()
-    print(dic)
     outdir = args.outdir
     prior_alpha = args.prior_alpha
     prior_beta = args.prior_beta
@@ -1059,6 +1058,28 @@ def main(args):
         cart_set54_evaluation('cart_targets.txt')
         benchmark_gs()
 
+    elif mode == 'X':
+        pyro.clear_param_store()
+        train_and_infer(model_X,guide_X,X,weights,True,prior_alpha,prior_beta)
+        while not os.path.exists(os.path.join(outdir,'elbo_loss.pdf')):
+            pyro.clear_param_store()
+            train_and_infer(model_X,guide_X,X,weights,True,prior_alpha,prior_beta)
+        diagnose_2d()
+        diagnose_3d()
+        cart_set54_evaluation('cart_targets.txt')
+        benchmark_gs()
+    
+    elif mode == 'Y':
+        pyro.clear_param_store()
+        train_and_infer(model_Y,guide_Y,Y,ebayes_beta_y,True,prior_alpha,prior_beta)
+        while not os.path.exists(os.path.join(outdir,'elbo_loss.pdf')):
+            pyro.clear_param_store()
+            train_and_infer(model_Y,guide_Y,Y,ebayes_beta_y,True,prior_alpha,prior_beta)
+        diagnose_2d()
+        diagnose_3d()
+        cart_set54_evaluation('cart_targets.txt')
+        benchmark_gs()
+
 
 
 
@@ -1079,6 +1100,8 @@ if __name__ == '__main__':
 
     '''
     ./BayesTS_rev.py --input gtex_gene_subsample.h5ad --weight weights.txt --mode XYZ --outdir output_sensitivity_82 --protein normal_tissue.tsv --prior_alpha 8.0 --prior_beta 2.0
+
+    ./BayesTS_rev.py --input combined_normal_cpm.h5ad --weight weights.txt --mode Y --outdir output_splicing_y
     '''
 
 

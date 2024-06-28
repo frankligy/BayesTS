@@ -149,22 +149,119 @@ mpl.rcParams['font.family'] = 'Arial'
 #     for uid in uids:
 #         f.write('{}\n'.format(uid))
 
-n = [10,50,100,200,500,1000]
-mcmc = [16.145457983016968, 39.225778341293335, 74.17322897911072, 161.4286584854126, 428.83027958869934,1462.81707406044]
-vi = [5.572661399841309, 7.877718210220337, 12.209128618240356, 22.4102463722229, 58.071091175079346,166.65992164611816]
-fig, ax = plt.subplots()
-ax.plot(np.arange(len(n)),mcmc,marker='o',label='mcmc')
-ax.plot(np.arange(len(n)),vi,marker='o',label='vi')
-ax.legend(frameon=False)
-ax.set_xticks(np.arange(len(n)))
-ax.set_xticklabels(n)
-ax.set_xlabel('Number of genes')
-ax.set_ylabel('Time(s)')
-plt.savefig('mcmc_vi.pdf',bbox_inches='tight')
-plt.close()
+# n = [10,50,100,200,500,1000]
+# mcmc = [16.145457983016968, 39.225778341293335, 74.17322897911072, 161.4286584854126, 428.83027958869934,1462.81707406044]
+# vi = [5.572661399841309, 7.877718210220337, 12.209128618240356, 22.4102463722229, 58.071091175079346,166.65992164611816]
+# fig, ax = plt.subplots()
+# ax.plot(np.arange(len(n)),mcmc,marker='o',label='mcmc')
+# ax.plot(np.arange(len(n)),vi,marker='o',label='vi')
+# ax.legend(frameon=False)
+# ax.set_xticks(np.arange(len(n)))
+# ax.set_xticklabels(n)
+# ax.set_xlabel('Number of genes')
+# ax.set_ylabel('Time(s)')
+# plt.savefig('mcmc_vi.pdf',bbox_inches='tight')
+# plt.close()
+
+
+# weights adjust
+# outdir = 'output_check'
+# annotated_x = pd.read_csv(os.path.join(outdir,'annotated_x.txt'),sep='\t',index_col=0)
+# markers = {
+#     'ENSG00000079112':'CDH17',
+#     'ENSG00000185686':'PRAME',
+#     'ENSG00000177455':'CD19',
+# }
+
+# marker_x = annotated_x.loc[list(markers.keys()),:].T
+# marker_x.to_csv('marker_x.txt',sep='\t')
+
+
+# junction cpm
+# adata = ad.read_h5ad('combined_normal_count.h5ad')
+# cpm = adata.X.toarray() / adata.var['total_count'].values.reshape(1,-1)
+# adata = ad.AnnData(X=csr_matrix(cpm),var=adata.var,obs=adata.obs)
+# adata.write('combined_normal_cpm.h5ad')
+
+# compare previously 5 tiers
+previous = pd.read_csv('full_results_XY_v1.txt',sep='\t',index_col=0)
+current = pd.read_csv(os.path.join('output_no_xy','full_results.txt'),sep='\t',index_col=0)
+current_dict = current['mean_sigma'].to_dict()
+previous['current'] = previous.index.map(current_dict).values
+previous.to_csv('compare_tier.txt',sep='\t')
 sys.exit('stop')
 
 
+
+
+# gtex viewer
+def gtex_visual_combine(adata,uid,outdir='.',figsize=(6.4,4.8),tumor=None,ylim=None):
+    if not os.path.exists(outdir):
+        os.makedirs(outdir)
+    query = uid
+    try:
+        info = adata[[query],:]
+    except:
+        print('{} not detected in gtex, impute as zero'.format(query))
+        info = ad.AnnData(X=csr_matrix(np.full((1,adata.shape[1]),0)),obs=pd.DataFrame(data={'mean':[0]},index=[uid]),var=adata.var) 
+    title = query
+    identifier = query.replace(':','_')
+    df = pd.DataFrame(data={'value':info.X.toarray().squeeze(),'tissue':info.var['tissue'].values},index=info.var_names)
+    tmp = []
+    for tissue,sub_df in df.groupby(by='tissue'):
+        tmp.append((sub_df,sub_df['value'].mean()))
+    sorted_sub_df_list = list(list(zip(*sorted(tmp,key=lambda x:x[1])))[0])
+    tumor_query_value = tumor.loc[query,:].values.squeeze()
+    tumor_sub_df = pd.DataFrame(data={'value':tumor_query_value,'tissue':['tumor']*tumor.shape[1]},index=tumor.columns)
+    sorted_sub_df_list.append(tumor_sub_df)
+
+    fig,ax = plt.subplots(figsize=figsize)
+    x = 0
+    x_list = []
+    y_list = []
+    v_delimiter = [0]
+    xticklabel = []
+    total_number_tissues = len(sorted_sub_df_list)
+    c_list_1 = np.concatenate([np.array(['g']*sub_df.shape[0]) for sub_df in sorted_sub_df_list[:-1]]).tolist()
+    c_list_2 = ['r'] * sorted_sub_df_list[-1].shape[0]
+    c_list = c_list_1 + c_list_2
+
+    sorted_sub_df_list = [df,tumor_sub_df]
+
+    for i,sub_df in enumerate(sorted_sub_df_list):
+        sub_df.sort_values(by='value',inplace=True)
+        n = sub_df.shape[0]
+        xticklabel.append(sub_df['tissue'].iloc[0])
+        for j,v in enumerate(sub_df['value']):
+            x_list.append(x)
+            y_list.append(v)
+            x += 1
+            if j == n-1:
+                v_delimiter.append(x)
+                x += 1
+    ax.scatter(x_list,y_list,s=2,c=c_list,marker='o')
+
+    for v in v_delimiter[1:-1]:
+        ax.axvline(v,linestyle='--',linewidth=0.5)
+    xtick = [(v + v_delimiter[i+1])/2 for i,v in enumerate(v_delimiter[:-1])]
+    ax.set_xticks(xtick)
+    ax.set_xticklabels(xticklabel,rotation=90,fontsize=1)
+    
+    ax.set_title(title)
+    ylabel = 'Raw read counts'
+    ax.set_ylabel(ylabel)
+    ax.set_xlabel('Normal Tissues --> Tumor')
+    if ylim is not None:
+        ax.set_ylim(ylim)
+    plt.savefig(os.path.join(outdir,'gtex_visual_combine_{}.pdf'.format(identifier)),bbox_inches='tight')
+    plt.close()
+
+adata = ad.read_h5ad('gtex_gene_subsample.h5ad')
+outdir = 'output_check'
+tumor = pd.read_csv('TCGA_SKCM_gene_tpm.txt',sep='\t',index_col=0)
+gtex_visual_combine(adata,uid='ENSG00000185686',outdir=outdir,tumor=tumor)
+    
+sys.exit('stop')
 
 # # combine PR
 def draw_PR(y_true,y_preds,outdir,outname):
