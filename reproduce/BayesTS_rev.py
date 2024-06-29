@@ -1102,6 +1102,8 @@ if __name__ == '__main__':
     ./BayesTS_rev.py --input gtex_gene_subsample.h5ad --weight weights.txt --mode XYZ --outdir output_sensitivity_82 --protein normal_tissue.tsv --prior_alpha 8.0 --prior_beta 2.0
 
     ./BayesTS_rev.py --input combined_normal_cpm.h5ad --weight weights.txt --mode Y --outdir output_splicing_y
+
+    ./BayesTS_rev.py --input adata_final.h5ad --weight weights.txt --mode XYZ --protein final_protein.txt --outdir output_logic_gate_xyz
     '''
 
 
