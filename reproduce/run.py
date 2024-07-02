@@ -18,6 +18,75 @@ mpl.rcParams['pdf.fonttype'] = 42
 mpl.rcParams['ps.fonttype'] = 42
 mpl.rcParams['font.family'] = 'Arial'
 
+'''reproducibility result, which also have tau and each modality'''
+def draw_PR(y_true,y_preds,outdir,outname):
+    plt.figure()
+    baseline = np.sum(np.array(y_true) == 1) / len(y_true)
+    for label,y_pred in y_preds.items():
+        precision,recall,_ = precision_recall_curve(y_true,y_pred,pos_label=1)
+        area_PR = auc(recall,precision)
+        lw = 1
+        plt.plot(recall,precision,lw=lw, label='{} (area = {})'.format(label,round(area_PR,2)))
+        plt.plot([0, 1], [baseline, baseline], color='navy', lw=lw, linestyle='--')
+    plt.xlim([0.0, 1.0])
+    plt.ylim([0.0, 1.1])
+    plt.xlabel('Recall')
+    plt.ylabel('Precision')
+    plt.title('PR curve example')
+    plt.legend(loc="upper right")
+    plt.savefig(os.path.join(outdir,outname),bbox_inches='tight')
+    plt.close()
+
+# y_preds = {}
+# gs = pd.read_csv('gold_standard.txt',sep='\t')['ensg'].values.tolist()
+# base_result = pd.read_csv(os.path.join('reproducibility','output_1','full_results.txt'),sep='\t',index_col=0)
+# base_order = base_result.index
+# for outdir in ['output_1','output_2','output_3','output_4','output_5']:
+#     result = pd.read_csv(os.path.join('reproducibility',outdir,'full_results.txt'),sep='\t',index_col=0).loc[base_order,:]
+#     result['label'] = [True if item in gs else False for item in result.index]
+#     y_preds[outdir] = np.negative(result['mean_sigma'].values)
+# draw_PR(result['label'].values,y_preds,'reproducibility','PR_curve_reproducibility_test.pdf')
+
+'''deg'''
+ensg2biotype = pd.read_csv('gene_lfc.txt',sep='\t',index_col=0)['biotype'].to_dict()
+hpa = pd.read_csv('proteinatlas.tsv',sep='\t')
+hpa = hpa.loc[hpa['RNA tissue specificity'].isin(['Tissue enriched','Group enriched','Not detected','Tissue enhanced']),:]
+cond1 = [True if isinstance(item,str) and 'Tumor antigen' in item else False for item in hpa['Molecular function']]
+cond2 = [True if isinstance(item,str) and 'melanoma' in item else False for item in hpa['RNA cancer specific FPKM']]
+cond = np.any([cond1,cond2],axis=0).tolist()
+hpa = hpa.loc[cond,:]
+
+gs = hpa['Ensembl'].values.tolist()
+result = pd.read_csv(os.path.join('output_xyc','full_results.txt'),sep='\t',index_col=0)
+result['biotype'] = result.index.map(ensg2biotype).values
+result = result.loc[result['biotype']=='protein_coding',:]
+result['label'] = [True if item in gs else False for item in result.index]
+deg = pd.read_csv('/gpfs/data/yarmarkovichlab/Frank/BayesTS/revision/deg.txt',sep='\t',index_col='Gene ID')
+ensg2adjp = deg['adjp'].to_dict()
+ensg2lfc = deg['Log2(Fold Change)'].to_dict()
+result['limma_adjp'] = result.index.map(ensg2adjp).values
+result['limma_lfc'] = result.index.map(ensg2lfc).values
+result = result.loc[result['limma_adjp'].notna(),:]
+result = result.loc[result['limma_lfc'].notna(),:]
+
+from scipy.stats import rankdata
+
+result['lfc_rank'] = rankdata(np.negative(result['limma_lfc'].values),method='min')
+result['adjp_rank'] = rankdata(result['limma_adjp'].values,method='min')
+result['limma_rank'] = [(r1+r2)/2 for r1,r2 in zip(result['lfc_rank'],result['adjp_rank'])]
+
+y_preds = {
+    'BayesTS_ext':np.negative(result['mean_sigma'].values),
+    'limma_rank':np.negative(result['limma_rank'].values)
+}
+
+limma_label = [True if p < 0.05 and s > 0.58 else False for p,s in zip(result['limma_adjp'],result['limma_lfc'])]
+result['limma_label'] = limma_label
+
+result.to_csv('deg_bayesTS.txt',sep='\t')
+draw_PR(result['label'].values,y_preds,'.','PR_curve_deg.pdf')
+sys.exit('stop')
+
 # derive CPM from junction count
 # count = pd.read_csv('counts.TCGA-SKCM-steady-state.txt',sep='\t',index_col=0)
 # count.rename(columns=lambda x:'-'.join(x.split('-')[:4]),inplace=True)
@@ -294,46 +363,8 @@ def draw_PR(y_true,y_preds,outdir,outname):
 
 
 # deg check
-ensg2biotype = pd.read_csv('gene_lfc.txt',sep='\t',index_col=0)['biotype'].to_dict()
-hpa = pd.read_csv('proteinatlas.tsv',sep='\t')
-hpa = hpa.loc[hpa['RNA tissue specificity'].isin(['Tissue enriched','Group enriched','Not detected','Tissue enhanced']),:]
-cond1 = [True if isinstance(item,str) and 'Tumor antigen' in item else False for item in hpa['Molecular function']]
-cond2 = [True if isinstance(item,str) and 'melanoma' in item else False for item in hpa['RNA cancer specific FPKM']]
-cond = np.any([cond1,cond2],axis=0).tolist()
-hpa = hpa.loc[cond,:]
 
-gs = hpa['Ensembl'].values.tolist()
-result = pd.read_csv(os.path.join('output_xyc','full_results.txt'),sep='\t',index_col=0)
-result['biotype'] = result.index.map(ensg2biotype).values
-result = result.loc[result['biotype']=='protein_coding',:]
-result['label'] = [True if item in gs else False for item in result.index]
-deg = pd.read_csv('/gpfs/data/yarmarkovichlab/Frank/BayesTS/revision/deg.txt',sep='\t',index_col='Gene ID')
-ensg2adjp = deg['adjp'].to_dict()
-ensg2lfc = deg['Log2(Fold Change)'].to_dict()
-result['limma_adjp'] = result.index.map(ensg2adjp).values
-result['limma_lfc'] = result.index.map(ensg2lfc).values
-result = result.loc[result['limma_adjp'].notna(),:]
-result = result.loc[result['limma_lfc'].notna(),:]
 
-from scipy.stats import rankdata
-
-result['lfc_rank'] = rankdata(np.negative(result['limma_lfc'].values),method='min')
-result['adjp_rank'] = rankdata(result['limma_adjp'].values,method='min')
-result['limma_rank'] = [(r1+r2)/2 for r1,r2 in zip(result['lfc_rank'],result['adjp_rank'])]
-
-y_preds = {
-    'BayesTS_ext':np.negative(result['mean_sigma'].values),
-    'limma_rank':np.negative(result['limma_rank'].values)
-}
-
-limma_label = [True if p < 0.05 and s > 0.58 else False for p,s in zip(result['limma_adjp'],result['limma_lfc'])]
-result['limma_label'] = limma_label
-
-result.to_csv('deg_bayesTS.txt',sep='\t')
-draw_PR(result['label'].values,y_preds,'.','PR_curve_deg.pdf');sys.exit('stop')
-
-result_sorted_bayes = result.sort_values(by='mean_sigma')
-result_sorted_lfc = result.sort_values(by='limma_lfc')
 
 
 
