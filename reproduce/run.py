@@ -7,7 +7,7 @@ import anndata as ad
 import seaborn as sns
 import matplotlib.pyplot as plt
 import matplotlib as mpl
-from scipy.stats import pearsonr
+from scipy.stats import pearsonr,ttest_ind,ttest_rel
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.metrics import precision_recall_curve,auc,roc_curve,accuracy_score
 import pickle
@@ -112,12 +112,52 @@ def draw_PR(y_true,y_preds,outdir,outname):
 #     y_preds[outdir] = np.negative(result['mean_sigma'].values)
 # draw_PR(result['label'].values,y_preds,'sensitivity','PR_curve_sensitivity_test.pdf')
 
+# fig,ax = plt.subplots()
+# for outdir in ['output_2_2','output_2_4','output_2_8','output_4_2','output_8_2']:
+#     result = pd.read_csv(os.path.join('sensitivity',outdir,'full_results.txt'),sep='\t',index_col=0)
+#     data = result['mean_sigma'].values
+#     sns.ecdfplot(data)
+# plt.savefig(os.path.join('sensitivity','ecdf_plots.pdf'),bbox_inches='tight')
+# plt.close()
+
+'''speed test'''
+# n = [10,50,100,200,500,1000]
+# mcmc = [16.145457983016968, 39.225778341293335, 74.17322897911072, 161.4286584854126, 428.83027958869934,1462.81707406044]
+# vi = [5.572661399841309, 7.877718210220337, 12.209128618240356, 22.4102463722229, 58.071091175079346,166.65992164611816]
+# fig, ax = plt.subplots()
+# ax.plot(np.arange(len(n)),mcmc,marker='o',label='mcmc')
+# ax.plot(np.arange(len(n)),vi,marker='o',label='vi')
+# ax.legend(frameon=False)
+# ax.set_xticks(np.arange(len(n)))
+# ax.set_xticklabels(n)
+# ax.set_xlabel('Number of genes')
+# ax.set_ylabel('Time(s)')
+# plt.savefig('mcmc_vi.pdf',bbox_inches='tight')
+# plt.close()
+
+'''weight adjust'''
+organ = 'testis'   # testis, immune, gi
+ensg = 'ENSG00000185686'  # ENSG00000185686, ENSG00000177455, ENSG00000079112
+dic = {}
+for weight in [0.9,0.5,0.1]:
+    each_weight = []
+    for i in [1,2,3,4,5]:
+        outdir = os.path.join('weight_adjust','output_weights_{}_{}_{}'.format(organ,weight,i))
+        result = pd.read_csv(os.path.join(outdir,'full_results.txt'),sep='\t',index_col=0)
+        each_weight.append(result.at[ensg,'mean_sigma'])
+    dic[weight] = each_weight
+t1,s1 = ttest_rel(dic[0.9],dic[0.5])
+t2,s2 = ttest_rel(dic[0.5],dic[0.1])
+t3,s3 = ttest_rel(dic[0.9],dic[0.1])
+
 fig,ax = plt.subplots()
-for outdir in ['output_2_2','output_2_4','output_2_8','output_4_2','output_8_2']:
-    result = pd.read_csv(os.path.join('sensitivity',outdir,'full_results.txt'),sep='\t',index_col=0)
-    data = result['mean_sigma'].values
-    sns.ecdfplot(data)
-plt.savefig(os.path.join('sensitivity','ecdf_plots.pdf'),bbox_inches='tight')
+sns.swarmplot(list(dic.values()),ax=ax)
+ax.set_ylim([0.03,0.10])
+ax.set_xticks((0,1,2))
+ax.set_xticklabels(('upweight','default','downweight'))
+ax.set_ylabel('PRAME BayesTS')
+ax.set_title('{}_{}_{}'.format(s1,s2,s3))
+plt.savefig(os.path.join('weight_adjust','{}_{}.pdf'.format(organ,ensg)),bbox_inches='tight')
 plt.close()
 sys.exit('stop')
 
@@ -254,19 +294,7 @@ sys.exit('stop')
 #     for uid in uids:
 #         f.write('{}\n'.format(uid))
 
-# n = [10,50,100,200,500,1000]
-# mcmc = [16.145457983016968, 39.225778341293335, 74.17322897911072, 161.4286584854126, 428.83027958869934,1462.81707406044]
-# vi = [5.572661399841309, 7.877718210220337, 12.209128618240356, 22.4102463722229, 58.071091175079346,166.65992164611816]
-# fig, ax = plt.subplots()
-# ax.plot(np.arange(len(n)),mcmc,marker='o',label='mcmc')
-# ax.plot(np.arange(len(n)),vi,marker='o',label='vi')
-# ax.legend(frameon=False)
-# ax.set_xticks(np.arange(len(n)))
-# ax.set_xticklabels(n)
-# ax.set_xlabel('Number of genes')
-# ax.set_ylabel('Time(s)')
-# plt.savefig('mcmc_vi.pdf',bbox_inches='tight')
-# plt.close()
+
 
 
 # weights adjust
