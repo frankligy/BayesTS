@@ -48,44 +48,80 @@ def draw_PR(y_true,y_preds,outdir,outname):
 # draw_PR(result['label'].values,y_preds,'reproducibility','PR_curve_reproducibility_test.pdf')
 
 '''deg'''
-ensg2biotype = pd.read_csv('gene_lfc.txt',sep='\t',index_col=0)['biotype'].to_dict()
-hpa = pd.read_csv('proteinatlas.tsv',sep='\t')
-hpa = hpa.loc[hpa['RNA tissue specificity'].isin(['Tissue enriched','Group enriched','Not detected','Tissue enhanced']),:]
-cond1 = [True if isinstance(item,str) and 'Tumor antigen' in item else False for item in hpa['Molecular function']]
-cond2 = [True if isinstance(item,str) and 'melanoma' in item else False for item in hpa['RNA cancer specific FPKM']]
-cond = np.any([cond1,cond2],axis=0).tolist()
-hpa = hpa.loc[cond,:]
+# ensg2biotype = pd.read_csv('gene_lfc.txt',sep='\t',index_col=0)['biotype'].to_dict()
+# hpa = pd.read_csv('proteinatlas.tsv',sep='\t')
+# hpa = hpa.loc[hpa['RNA tissue specificity'].isin(['Tissue enriched','Group enriched','Not detected','Tissue enhanced']),:]
+# cond1 = [True if isinstance(item,str) and 'Tumor antigen' in item else False for item in hpa['Molecular function']]
+# cond2 = [True if isinstance(item,str) and 'melanoma' in item else False for item in hpa['RNA cancer specific FPKM']]
+# cond = np.any([cond1,cond2],axis=0).tolist()
+# hpa = hpa.loc[cond,:]
 
-gs = hpa['Ensembl'].values.tolist()
-result = pd.read_csv(os.path.join('output_xyc','full_results.txt'),sep='\t',index_col=0)
-result['biotype'] = result.index.map(ensg2biotype).values
-result = result.loc[result['biotype']=='protein_coding',:]
-result['label'] = [True if item in gs else False for item in result.index]
-deg = pd.read_csv('/gpfs/data/yarmarkovichlab/Frank/BayesTS/revision/deg.txt',sep='\t',index_col='Gene ID')
-ensg2adjp = deg['adjp'].to_dict()
-ensg2lfc = deg['Log2(Fold Change)'].to_dict()
-result['limma_adjp'] = result.index.map(ensg2adjp).values
-result['limma_lfc'] = result.index.map(ensg2lfc).values
-result = result.loc[result['limma_adjp'].notna(),:]
-result = result.loc[result['limma_lfc'].notna(),:]
+# gs = hpa['Ensembl'].values.tolist()
+# result = pd.read_csv(os.path.join('output_xyc','full_results.txt'),sep='\t',index_col=0)
+# result['biotype'] = result.index.map(ensg2biotype).values
+# result = result.loc[result['biotype']=='protein_coding',:]
+# result['label'] = [True if item in gs else False for item in result.index]
+# deg = pd.read_csv('/gpfs/data/yarmarkovichlab/Frank/BayesTS/revision/deg.txt',sep='\t',index_col='Gene ID')
+# ensg2adjp = deg['adjp'].to_dict()
+# ensg2lfc = deg['Log2(Fold Change)'].to_dict()
+# result['limma_adjp'] = result.index.map(ensg2adjp).values
+# result['limma_lfc'] = result.index.map(ensg2lfc).values
+# result = result.loc[result['limma_adjp'].notna(),:]
+# result = result.loc[result['limma_lfc'].notna(),:]
 
-from scipy.stats import rankdata
+# from scipy.stats import rankdata
 
-result['lfc_rank'] = rankdata(np.negative(result['limma_lfc'].values),method='min')
-result['adjp_rank'] = rankdata(result['limma_adjp'].values,method='min')
-result['limma_rank'] = [(r1+r2)/2 for r1,r2 in zip(result['lfc_rank'],result['adjp_rank'])]
+# result['lfc_rank'] = rankdata(np.negative(result['limma_lfc'].values),method='min')
+# result['adjp_rank'] = rankdata(result['limma_adjp'].values,method='min')
+# result['limma_rank'] = [(r1+r2)/2 for r1,r2 in zip(result['lfc_rank'],result['adjp_rank'])]
 
-y_preds = {
-    'BayesTS_ext':np.negative(result['mean_sigma'].values),
-    'limma_rank':np.negative(result['limma_rank'].values)
-}
+# y_preds = {
+#     'BayesTS_ext':np.negative(result['mean_sigma'].values),
+#     'limma_rank':np.negative(result['limma_rank'].values)
+# }
 
-limma_label = [True if p < 0.05 and s > 0.58 else False for p,s in zip(result['limma_adjp'],result['limma_lfc'])]
-result['limma_label'] = limma_label
+# limma_label = [True if p < 0.05 and s > 0.58 else False for p,s in zip(result['limma_adjp'],result['limma_lfc'])]
+# result['limma_label'] = limma_label
 
-result.to_csv('deg_bayesTS.txt',sep='\t')
-draw_PR(result['label'].values,y_preds,'.','PR_curve_deg.pdf')
+# result.to_csv('deg_bayesTS.txt',sep='\t')
+# draw_PR(result['label'].values,y_preds,'.','PR_curve_deg.pdf')
+
+'''sensitivity'''
+# create such 5 beta distribution
+# from scipy.stats import beta
+# fig,ax = plt.subplots(figsize=(6.4,4.8))
+# tups = [(2,2),(2,4),(2,8),(4,2),(8,2)]
+# for tup in tups:
+#     a,b = tup
+#     x = np.linspace(beta.ppf(0.001,a=a,b=b),beta.ppf(0.999,a=a,b=b),1000)
+#     y = beta.pdf(x,a=a,b=b)
+#     ax.plot(x,y,linewidth=2,label='{}_{}'.format(a,b))
+# ax.legend()
+# ax.set_xlabel('Tumor specificity')
+# ax.set_ylabel('Probability')
+# plt.savefig(os.path.join('sensitivity','schema.pdf'),bbox_inches='tight')
+# plt.close()
+
+# y_preds = {}
+# gs = pd.read_csv('gold_standard.txt',sep='\t')['ensg'].values.tolist()
+# base_result = pd.read_csv(os.path.join('sensitivity','output_2_2','full_results.txt'),sep='\t',index_col=0)
+# base_order = base_result.index
+# for outdir in ['output_2_2','output_2_4','output_2_8','output_4_2','output_8_2']:
+#     result = pd.read_csv(os.path.join('sensitivity',outdir,'full_results.txt'),sep='\t',index_col=0).loc[base_order,:]
+#     result['label'] = [True if item in gs else False for item in result.index]
+#     y_preds[outdir] = np.negative(result['mean_sigma'].values)
+# draw_PR(result['label'].values,y_preds,'sensitivity','PR_curve_sensitivity_test.pdf')
+
+fig,ax = plt.subplots()
+for outdir in ['output_2_2','output_2_4','output_2_8','output_4_2','output_8_2']:
+    result = pd.read_csv(os.path.join('sensitivity',outdir,'full_results.txt'),sep='\t',index_col=0)
+    data = result['mean_sigma'].values
+    sns.ecdfplot(data)
+plt.savefig(os.path.join('sensitivity','ecdf_plots.pdf'),bbox_inches='tight')
+plt.close()
 sys.exit('stop')
+
+
 
 # derive CPM from junction count
 # count = pd.read_csv('counts.TCGA-SKCM-steady-state.txt',sep='\t',index_col=0)
@@ -252,13 +288,7 @@ sys.exit('stop')
 # adata = ad.AnnData(X=csr_matrix(cpm),var=adata.var,obs=adata.obs)
 # adata.write('combined_normal_cpm.h5ad')
 
-# compare previously 5 tiers
-previous = pd.read_csv('full_results_XY_v1.txt',sep='\t',index_col=0)
-current = pd.read_csv(os.path.join('output_no_xy','full_results.txt'),sep='\t',index_col=0)
-current_dict = current['mean_sigma'].to_dict()
-previous['current'] = previous.index.map(current_dict).values
-previous.to_csv('compare_tier.txt',sep='\t')
-sys.exit('stop')
+
 
 
 
