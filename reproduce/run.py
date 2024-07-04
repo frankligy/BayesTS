@@ -121,6 +121,20 @@ def draw_PR(y_true,y_preds,outdir,outname):
 # plt.close()
 
 '''speed test'''
+# outdir = 'output_xyz'
+# with open(os.path.join(outdir,'X.p'),'rb') as f:
+#     X = pickle.load(f)
+# np.savetxt('X.out',X,delimiter='\t')
+# with open(os.path.join(outdir,'Y.p'),'rb') as f:
+#     Y = pickle.load(f)
+# np.savetxt('Y.out',Y,delimiter='\t')
+# with open(os.path.join(outdir,'uids.p'),'rb') as f:
+#     uids = pickle.load(f)
+# with open('uids.out','w') as f:
+#     for uid in uids:
+#         f.write('{}\n'.format(uid))
+
+
 # n = [10,50,100,200,500,1000]
 # mcmc = [16.145457983016968, 39.225778341293335, 74.17322897911072, 161.4286584854126, 428.83027958869934,1462.81707406044]
 # vi = [5.572661399841309, 7.877718210220337, 12.209128618240356, 22.4102463722229, 58.071091175079346,166.65992164611816]
@@ -136,6 +150,18 @@ def draw_PR(y_true,y_preds,outdir,outname):
 # plt.close()
 
 '''weight adjust'''
+
+# outdir = 'output_check'
+# annotated_x = pd.read_csv(os.path.join(outdir,'annotated_x.txt'),sep='\t',index_col=0)
+# markers = {
+#     'ENSG00000079112':'CDH17',
+#     'ENSG00000185686':'PRAME',
+#     'ENSG00000177455':'CD19',
+# }
+
+# marker_x = annotated_x.loc[list(markers.keys()),:].T
+# marker_x.to_csv('marker_x.txt',sep='\t')
+
 # organs = ['testis', 'immune', 'gi']
 # ensgs = ['ENSG00000185686', 'ENSG00000177455', 'ENSG00000079112']
 # ylims = [(0,0.15),(0,0.20),(0,0.18)]
@@ -308,9 +334,9 @@ def gtex_visual_combine(adata,uid,outdir='.',figsize=(6.4,4.8),tumor=None,ylim=N
 #     ax.set_ylabel('Transcripts Per Million (TPM)')
 #     ax.set_title('{},{}'.format(ensg,symbol))
 #     plt.savefig('{}_{}.pdf'.format(ensg,symbol),bbox_inches='tight')
-sys.exit('stop')
 
-# re-sample 25 per tissues for GTEx TPM
+
+''' re-sample 25 per tissues for GTEx TPM'''
 # adata_gtex = ad.read_h5ad('gtex_gene_all.h5ad')
 # var = adata_gtex.var
 # tissues = var['tissue'].unique().tolist()
@@ -333,93 +359,10 @@ sys.exit('stop')
 # adata_gtex_selected = adata_gtex_selected[cond,:]  # 56156 × 1228
 # adata_gtex_selected.write('gtex_gene_subsample.h5ad')
 
-# check if TPM is lognormal
-# adata = ad.read_h5ad('gtex_gene_subsample.h5ad')
-# gene = 'ENSG00000177455'
-# values = np.log2(adata[gene,:].X.toarray()[0])
-# sns.histplot(values)
-# plt.savefig('check.pdf',bbox_inches='tight')
-# plt.close()
 
 
 
-# estimate TPM, the beta parameter using eBayes
-# adata = ad.read_h5ad('gtex_gene_subsample.h5ad')
-
-# nuorf = pd.read_csv('nuORF.txt',sep='\t')
-# nuorf = nuorf.loc[nuorf['geneType']=='protein_coding',:]
-# nuorf['ensg'] = [item.split('.')[0] for item in nuorf['geneId']]
-# ensg2pc = {item1:item2 for item1,item2 in zip(nuorf['ensg'],nuorf['geneType'])}
-
-# common = list(set(adata.obs_names).intersection(set(ensg2pc.keys())))
-# adata = adata[common,:]
-
-# lower_quantiles = np.quantile(adata.X.toarray(),0.25,axis=1)
-# median_quantiles = np.quantile(adata.X.toarray(),0.5,axis=1)
-# upper_quantiles = np.quantile(adata.X.toarray(),0.75,axis=1)
-
-# a = median_quantiles / 0.5
-# a = a[a>0]
-# a = np.sort(a)
-# covered = np.arange(len(a)) / len(a)
-# df = pd.DataFrame(data={'a':a,'covered':covered})
-# cutoff = df.loc[df['covered']<=0.95,:].iloc[-1,0]
-# a = a[a<=cutoff]  
-
-# fig,ax = plt.subplots()
-# sns.histplot(a,ax=ax,stat='density')
-
-# # if using exponential, which is gamma(1,1/lambda)
-# lambda_ = 1/np.mean(a)
-# from scipy.stats import expon,gamma
-# x = np.linspace(0, cutoff, 1000)
-# pdf = expon.pdf(x, scale=1/lambda_)
-# pdf = gamma.pdf(x,a=1,scale=1/lambda_)
-# ax.plot(x,pdf)
-# plt.savefig('expo_a.pdf',bbox_inches='tight')
-# plt.close()
-
-# threshold the gene matrix when deriving the tissue distribution
-# dic = {}
-# for cutoff in np.arange(0,10,0.25):
-#     result_path = 'result_{}.txt'.format(str(cutoff))
-#     result = pd.read_csv(result_path,sep='\t',index_col=0)
-#     repr_spearman = np.nanmean(result['spearman'].values)
-#     repr_aupr = np.nanmean(result['aupr'].values)
-#     dic[cutoff] = ((repr_spearman,repr_aupr))
-
-
-# test speed
-# outdir = 'output_xyz'
-# with open(os.path.join(outdir,'X.p'),'rb') as f:
-#     X = pickle.load(f)
-# np.savetxt('X.out',X,delimiter='\t')
-# with open(os.path.join(outdir,'Y.p'),'rb') as f:
-#     Y = pickle.load(f)
-# np.savetxt('Y.out',Y,delimiter='\t')
-# with open(os.path.join(outdir,'uids.p'),'rb') as f:
-#     uids = pickle.load(f)
-# with open('uids.out','w') as f:
-#     for uid in uids:
-#         f.write('{}\n'.format(uid))
-
-
-
-
-# weights adjust
-# outdir = 'output_check'
-# annotated_x = pd.read_csv(os.path.join(outdir,'annotated_x.txt'),sep='\t',index_col=0)
-# markers = {
-#     'ENSG00000079112':'CDH17',
-#     'ENSG00000185686':'PRAME',
-#     'ENSG00000177455':'CD19',
-# }
-
-# marker_x = annotated_x.loc[list(markers.keys()),:].T
-# marker_x.to_csv('marker_x.txt',sep='\t')
-
-
-# junction cpm
+''' junction cpm'''
 # adata = ad.read_h5ad('combined_normal_count.h5ad')
 # cpm = adata.X.toarray() / adata.var['total_count'].values.reshape(1,-1)
 # adata = ad.AnnData(X=csr_matrix(cpm),var=adata.var,obs=adata.obs)
@@ -428,70 +371,74 @@ sys.exit('stop')
 
 
 
+'''prior and posterior check'''
+# def prior_posterior_check(uid,outdir,ebayes_beta_y):
+#     full_result = pd.read_csv(os.path.join(outdir,'full_results.txt'),sep='\t',index_col=0)
+#     index = uids.index(uid)
+#     prior_sigma = full_result.loc[uid,'prior_sigma']
+#     posterior_sigma = full_result.loc[uid,'mean_sigma']
+
+#     # c
+#     beta_x = 25
+#     data = X[:,index]
+#     prior = dist.Poisson(beta_x*prior_sigma).expand([t]).sample().data.cpu().numpy()
+#     posterior = dist.Poisson(beta_x*posterior_sigma).expand([t]).sample().data.cpu().numpy()
+#     fig,ax = plt.subplots()
+#     for item in [data,prior,posterior]:
+#         sns.histplot(item,ax=ax,stat='probability',alpha=0.5,bins=10)
+#     plt.savefig(os.path.join(outdir,'{}_c.pdf'.format(uid)),bbox_inches='tight')
+#     plt.close()
+
+#     # nc
+#     beta_y = ebayes_beta_y
+#     data = Y[:,index]
+#     prior = dist.LogNormal(beta_y*prior_sigma,0.5).expand([s]).sample().data.cpu().numpy()
+#     posterior = dist.LogNormal(beta_y*posterior_sigma,0.5).expand([s]).sample().data.cpu().numpy()
+#     fig,ax = plt.subplots()
+#     for item in [data,prior,posterior]:
+#         sns.histplot(np.log(item),ax=ax,stat='probability',bins=40,alpha=0.5)
+#     plt.savefig(os.path.join(outdir,'{}_nc.pdf'.format(uid)),bbox_inches='tight')
+#     plt.close()
+
+#     # pc
+#     data = Z[:,index]
+#     probs = [torch.tensor([2/3*sigma,1/3*sigma,1/3*(1-sigma),2/3*(1-sigma)]) for sigma in [prior_sigma,posterior_sigma]]
+#     prior = dist.Categorical(probs[0]).expand([p]).sample().data.cpu().numpy()
+#     posterior = dist.Categorical(probs[1]).expand([p]).sample().data.cpu().numpy()
+#     fig,axes = plt.subplots(ncols=3,gridspec_kw={'wspace':0.5})
+#     axes = axes.flatten()
+#     for i,(item,color,title) in enumerate(zip([data,prior,posterior],['#7995C4','#E5A37D','#80BE8E'],['data','prior','posterior'])): 
+#         sns.histplot(item,ax=axes[i],stat='count',bins=4,alpha=0.5,facecolor=color)
+#         axes[i].set_ylim([0,90])
+#         axes[i].set_title(title)
+#     plt.savefig(os.path.join(outdir,'{}_pc.pdf'.format(uid)),bbox_inches='tight')
+#     plt.close()
+
+# outdir = 'ablation/output_xyz'
+# ebayes_beta_y = 4.301273922770753
+# s = 1228
+# t = 49
+# p = 89
+# uid = 'ENSG00000111640'  #ENSG00000111640 ENSG00000198681
+# with open(os.path.join(outdir,'uids.p'),'rb') as f:
+#     uids = pickle.load(f)
+# with open(os.path.join(outdir,'X.p'),'rb') as f:
+#     X = pickle.load(f)
+# with open(os.path.join(outdir,'Y.p'),'rb') as f:
+#     Y = pickle.load(f)
+# with open(os.path.join(outdir,'Z.p'),'rb') as f:
+#     Z = pickle.load(f)
+
+# prior_posterior_check(uid,outdir,ebayes_beta_y)
 
 
-
-
-
-
-# prior and posterior check
-def prior_posterior_check(uid,outdir,ebayes_beta_y):
-    full_result = pd.read_csv(os.path.join(outdir,'full_results.txt'),sep='\t',index_col=0)
-    index = uids.index(uid)
-    prior_sigma = full_result.loc[uid,'prior_sigma']
-    posterior_sigma = full_result.loc[uid,'mean_sigma']
-
-    # c
-    beta_x = 25
-    data = X[:,index]
-    prior = dist.Poisson(beta_x*prior_sigma).expand([t]).sample().data.cpu().numpy()
-    posterior = dist.Poisson(beta_x*posterior_sigma).expand([t]).sample().data.cpu().numpy()
-    fig,ax = plt.subplots()
-    for item in [data,prior,posterior]:
-        sns.histplot(item,ax=ax,stat='probability',alpha=0.5,bins=10)
-    plt.savefig(os.path.join(outdir,'{}_c.pdf'.format(uid)),bbox_inches='tight')
-    plt.close()
-
-    # nc
-    beta_y = ebayes_beta_y
-    data = Y[:,index]
-    prior = dist.LogNormal(beta_y*prior_sigma,0.5).expand([s]).sample().data.cpu().numpy()
-    posterior = dist.LogNormal(beta_y*posterior_sigma,0.5).expand([s]).sample().data.cpu().numpy()
-    fig,ax = plt.subplots()
-    for item in [data,prior,posterior]:
-        sns.histplot(np.log(item),ax=ax,stat='probability',bins=40,alpha=0.5)
-    plt.savefig(os.path.join(outdir,'{}_nc.pdf'.format(uid)),bbox_inches='tight')
-    plt.close()
-
-    # pc
-    data = Z[:,index]
-    probs = [torch.tensor([2/3*sigma,1/3*sigma,1/3*(1-sigma),2/3*(1-sigma)]) for sigma in [prior_sigma,posterior_sigma]]
-    prior = dist.Categorical(probs[0]).expand([p]).sample().data.cpu().numpy()
-    posterior = dist.Categorical(probs[1]).expand([p]).sample().data.cpu().numpy()
-    fig,axes = plt.subplots(ncols=3,gridspec_kw={'wspace':0.5})
-    axes = axes.flatten()
-    for i,(item,color,title) in enumerate(zip([data,prior,posterior],['#7995C4','#E5A37D','#80BE8E'],['data','prior','posterior'])): 
-        sns.histplot(item,ax=axes[i],stat='count',bins=4,alpha=0.5,facecolor=color)
-        axes[i].set_ylim([0,90])
-        axes[i].set_title(title)
-    plt.savefig(os.path.join(outdir,'{}_pc.pdf'.format(uid)),bbox_inches='tight')
-    plt.close()
-
-outdir = 'output_test'
-ebayes_beta_y = 4.301273922770753
-s = 1228
-t = 49
-p = 89
-uid = 'ENSG00000111640'  #ENSG00000111640 ENSG00000198681
-with open(os.path.join(outdir,'uids.p'),'rb') as f:
-    uids = pickle.load(f)
-with open(os.path.join(outdir,'X.p'),'rb') as f:
-    X = pickle.load(f)
-with open(os.path.join(outdir,'Y.p'),'rb') as f:
-    Y = pickle.load(f)
-with open(os.path.join(outdir,'Z.p'),'rb') as f:
-    Z = pickle.load(f)
-
-prior_posterior_check(uid,outdir,ebayes_beta_y)
+'''threshold the gene matrix when deriving the tissue distribution'''
+dic = {}
+for cutoff in np.arange(0,10,0.25):
+    result_path = 'result_{}.txt'.format(str(cutoff))
+    result = pd.read_csv(result_path,sep='\t',index_col=0)
+    repr_spearman = np.nanmean(result['spearman'].values)
+    repr_aupr = np.nanmean(result['aupr'].values)
+    dic[cutoff] = ((repr_spearman,repr_aupr))
 
 
