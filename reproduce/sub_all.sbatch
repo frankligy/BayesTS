@@ -42,13 +42,60 @@ unset PYTHONPATH
 # ./BayesTS_rev.py --input gtex_gene_subsample.h5ad --weight weights.txt --mode YZ --outdir ablation/output_yz --protein normal_tissue.tsv
 # ./BayesTS_rev.py --input gtex_gene_subsample.h5ad --weight weights.txt --mode XZ --outdir ablation/output_xz --protein normal_tissue.tsv
 
-# sensitivity test
-./BayesTS_rev.py --input gtex_gene_subsample.h5ad --weight weights.txt --mode XYZ --outdir sensitivity/output_2_2 --protein normal_tissue.tsv --prior_alpha 2.0 --prior_beta 2.0
-./BayesTS_rev.py --input gtex_gene_subsample.h5ad --weight weights.txt --mode XYZ --outdir sensitivity/output_4_2 --protein normal_tissue.tsv --prior_alpha 4.0 --prior_beta 2.0
-./BayesTS_rev.py --input gtex_gene_subsample.h5ad --weight weights.txt --mode XYZ --outdir sensitivity/output_8_2 --protein normal_tissue.tsv --prior_alpha 8.0 --prior_beta 2.0
-./BayesTS_rev.py --input gtex_gene_subsample.h5ad --weight weights.txt --mode XYZ --outdir sensitivity/output_2_4 --protein normal_tissue.tsv --prior_alpha 2.0 --prior_beta 4.0
-./BayesTS_rev.py --input gtex_gene_subsample.h5ad --weight weights.txt --mode XYZ --outdir sensitivity/output_2_8 --protein normal_tissue.tsv --prior_alpha 2.0 --prior_beta 8.0
+# # sensitivity test
+# ./BayesTS_rev.py --input gtex_gene_subsample.h5ad --weight weights.txt --mode XYZ --outdir sensitivity/output_2_2 --protein normal_tissue.tsv --prior_alpha 2.0 --prior_beta 2.0
+# ./BayesTS_rev.py --input gtex_gene_subsample.h5ad --weight weights.txt --mode XYZ --outdir sensitivity/output_4_2 --protein normal_tissue.tsv --prior_alpha 4.0 --prior_beta 2.0
+# ./BayesTS_rev.py --input gtex_gene_subsample.h5ad --weight weights.txt --mode XYZ --outdir sensitivity/output_8_2 --protein normal_tissue.tsv --prior_alpha 8.0 --prior_beta 2.0
+# ./BayesTS_rev.py --input gtex_gene_subsample.h5ad --weight weights.txt --mode XYZ --outdir sensitivity/output_2_4 --protein normal_tissue.tsv --prior_alpha 2.0 --prior_beta 4.0
+# ./BayesTS_rev.py --input gtex_gene_subsample.h5ad --weight weights.txt --mode XYZ --outdir sensitivity/output_2_8 --protein normal_tissue.tsv --prior_alpha 2.0 --prior_beta 8.0
 
+# weight adjust test
+# 1. testis
+# for i in 1 2 3 4 5
+# do 
+#     ./BayesTS_rev.py --input gtex_gene_subsample.h5ad --weight weight_adjust/weights_testis_0.9.txt --mode XYZ --outdir weight_adjust/output_weights_testis_0.9_${i} --protein normal_tissue.tsv
+# done
 
+# for i in 1 2 3 4 5
+# do 
+#     ./BayesTS_rev.py --input gtex_gene_subsample.h5ad --weight weights.txt --mode XYZ --outdir weight_adjust/output_weights_testis_0.5_${i} --protein normal_tissue.tsv
+# done
+
+# for i in 1 2 3 4 5
+# do 
+#     ./BayesTS_rev.py --input gtex_gene_subsample.h5ad --weight weight_adjust/weights_testis_0.1.txt --mode XYZ --outdir weight_adjust/output_weights_testis_0.1_${i} --protein normal_tissue.tsv
+# done
+
+# 2. immune
+for i in 1 2 3 4 5
+do 
+    ./BayesTS_rev.py --input gtex_gene_subsample.h5ad --weight weight_adjust/weights_immune_0.9.txt --mode XYZ --outdir weight_adjust/output_weights_immune_0.9_${i} --protein normal_tissue.tsv
+done
+
+for i in 1 2 3 4 5
+do 
+    ./BayesTS_rev.py --input gtex_gene_subsample.h5ad --weight weights.txt --mode XYZ --outdir weight_adjust/output_weights_immune_0.5_${i} --protein normal_tissue.tsv
+done
+
+for i in 1 2 3 4 5
+do 
+    ./BayesTS_rev.py --input gtex_gene_subsample.h5ad --weight weight_adjust/weights_immune_0.1.txt --mode XYZ --outdir weight_adjust/output_weights_immune_0.1_${i} --protein normal_tissue.tsv
+done
+
+# 2. gi
+for i in 1 2 3 4 5
+do 
+    ./BayesTS_rev.py --input gtex_gene_subsample.h5ad --weight weight_adjust/weights_gi_0.9.txt --mode XYZ --outdir weight_adjust/output_weights_gi_0.9_${i} --protein normal_tissue.tsv
+done
+
+for i in 1 2 3 4 5
+do 
+    ./BayesTS_rev.py --input gtex_gene_subsample.h5ad --weight weights.txt --mode XYZ --outdir weight_adjust/output_weights_gi_0.5_${i} --protein normal_tissue.tsv
+done
+
+for i in 1 2 3 4 5
+do 
+    ./BayesTS_rev.py --input gtex_gene_subsample.h5ad --weight weight_adjust/weights_gi_0.1.txt --mode XYZ --outdir weight_adjust/output_weights_gi_0.1_${i} --protein normal_tissue.tsv
+done
 
 

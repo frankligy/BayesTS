@@ -136,29 +136,30 @@ def draw_PR(y_true,y_preds,outdir,outname):
 # plt.close()
 
 '''weight adjust'''
-organ = 'testis'   # testis, immune, gi
-ensg = 'ENSG00000185686'  # ENSG00000185686, ENSG00000177455, ENSG00000079112
-dic = {}
-for weight in [0.9,0.5,0.1]:
-    each_weight = []
-    for i in [1,2,3,4,5]:
-        outdir = os.path.join('weight_adjust','output_weights_{}_{}_{}'.format(organ,weight,i))
-        result = pd.read_csv(os.path.join(outdir,'full_results.txt'),sep='\t',index_col=0)
-        each_weight.append(result.at[ensg,'mean_sigma'])
-    dic[weight] = each_weight
-t1,s1 = ttest_rel(dic[0.9],dic[0.5])
-t2,s2 = ttest_rel(dic[0.5],dic[0.1])
-t3,s3 = ttest_rel(dic[0.9],dic[0.1])
+organs = ['testis', 'immune', 'gi']
+ensgs = ['ENSG00000185686', 'ENSG00000177455', 'ENSG00000079112']
+for organ,ensg in zip(organs,ensgs):
+    dic = {}
+    for weight in [0.9,0.5,0.1]:
+        each_weight = []
+        for i in [1,2,3,4,5]:
+            outdir = os.path.join('weight_adjust','output_weights_{}_{}_{}'.format(organ,weight,i))
+            result = pd.read_csv(os.path.join(outdir,'full_results.txt'),sep='\t',index_col=0)
+            each_weight.append(result.at[ensg,'mean_sigma'])
+        dic[weight] = each_weight
+    t1,s1 = ttest_rel(dic[0.9],dic[0.5])
+    t2,s2 = ttest_rel(dic[0.5],dic[0.1])
+    t3,s3 = ttest_rel(dic[0.9],dic[0.1])
 
-fig,ax = plt.subplots()
-sns.swarmplot(list(dic.values()),ax=ax)
-ax.set_ylim([0.03,0.10])
-ax.set_xticks((0,1,2))
-ax.set_xticklabels(('upweight','default','downweight'))
-ax.set_ylabel('PRAME BayesTS')
-ax.set_title('{}_{}_{}'.format(s1,s2,s3))
-plt.savefig(os.path.join('weight_adjust','{}_{}.pdf'.format(organ,ensg)),bbox_inches='tight')
-plt.close()
+    fig,ax = plt.subplots()
+    sns.swarmplot(list(dic.values()),ax=ax)
+    # ax.set_ylim([0.03,0.10])
+    ax.set_xticks((0,1,2))
+    ax.set_xticklabels(('upweight','default','downweight'))
+    ax.set_ylabel('{} BayesTS'.format(ensg))
+    ax.set_title('{}_{}_{}'.format(s1,s2,s3))
+    plt.savefig(os.path.join('weight_adjust','{}_{}.pdf'.format(organ,ensg)),bbox_inches='tight')
+    plt.close()
 sys.exit('stop')
 
 
