@@ -136,34 +136,141 @@ def draw_PR(y_true,y_preds,outdir,outname):
 # plt.close()
 
 '''weight adjust'''
-organs = ['testis', 'immune', 'gi']
-ensgs = ['ENSG00000185686', 'ENSG00000177455', 'ENSG00000079112']
-for organ,ensg in zip(organs,ensgs):
-    dic = {}
-    for weight in [0.9,0.5,0.1]:
-        each_weight = []
-        for i in [1,2,3,4,5]:
-            outdir = os.path.join('weight_adjust','output_weights_{}_{}_{}'.format(organ,weight,i))
-            result = pd.read_csv(os.path.join(outdir,'full_results.txt'),sep='\t',index_col=0)
-            each_weight.append(result.at[ensg,'mean_sigma'])
-        dic[weight] = each_weight
-    t1,s1 = ttest_rel(dic[0.9],dic[0.5])
-    t2,s2 = ttest_rel(dic[0.5],dic[0.1])
-    t3,s3 = ttest_rel(dic[0.9],dic[0.1])
+# organs = ['testis', 'immune', 'gi']
+# ensgs = ['ENSG00000185686', 'ENSG00000177455', 'ENSG00000079112']
+# ylims = [(0,0.15),(0,0.20),(0,0.18)]
+# for organ,ensg,ylim in zip(organs,ensgs,ylims):
+#     dic = {}
+#     for weight in [0.9,0.5,0.1]:
+#         each_weight = []
+#         for i in [1,2,3,4,5]:
+#             outdir = os.path.join('weight_adjust','output_weights_{}_{}_{}'.format(organ,weight,i))
+#             result = pd.read_csv(os.path.join(outdir,'full_results.txt'),sep='\t',index_col=0)
+#             each_weight.append(result.at[ensg,'mean_sigma'])
+#         dic[weight] = each_weight
+#     t1,s1 = ttest_rel(dic[0.9],dic[0.5])
+#     t2,s2 = ttest_rel(dic[0.5],dic[0.1])
+#     t3,s3 = ttest_rel(dic[0.9],dic[0.1])
 
-    fig,ax = plt.subplots()
-    sns.swarmplot(list(dic.values()),ax=ax)
-    # ax.set_ylim([0.03,0.10])
-    ax.set_xticks((0,1,2))
-    ax.set_xticklabels(('upweight','default','downweight'))
-    ax.set_ylabel('{} BayesTS'.format(ensg))
-    ax.set_title('{}_{}_{}'.format(s1,s2,s3))
-    plt.savefig(os.path.join('weight_adjust','{}_{}.pdf'.format(organ,ensg)),bbox_inches='tight')
+#     fig,ax = plt.subplots()
+#     sns.swarmplot(list(dic.values()),ax=ax)
+#     ax.set_ylim(ylim)
+#     ax.set_xticks((0,1,2))
+#     ax.set_xticklabels(('upweight','default','downweight'))
+#     ax.set_ylabel('{} BayesTS'.format(ensg))
+#     ax.set_title('{}_{}_{}'.format(s1,s2,s3))
+#     plt.savefig(os.path.join('weight_adjust','{}_{}.pdf'.format(organ,ensg)),bbox_inches='tight')
+#     plt.close()
+
+'''find new targets'''
+# result = pd.read_csv(os.path.join('ablation','output_xyz','full_results.txt'),sep='\t',index_col=0)
+# result = result.sort_values(by='mean_sigma')
+# fig,ax = plt.subplots(figsize=(12,4.8))
+# ax.bar(x=np.arange(result.shape[0]),height=result['mean_sigma'].values)
+# index_MEGA1A = result.index.tolist().index('ENSG00000198681')
+# index_MS4A1 = result.index.tolist().index('ENSG00000156738')
+# ax.axvline(x=index_MEGA1A,c='r',linestyle='--')
+# ax.axvline(x=index_MS4A1,c='r',linestyle='--')
+# ax.set_xlabel('Targets ranked by tumor specificity')
+# ax.set_ylabel('Inferred tumor specificity score')
+# plt.savefig('new_targets.pdf',bbox_inches='tight')
+# plt.close()
+
+def gtex_visual_combine(adata,uid,outdir='.',figsize=(6.4,4.8),tumor=None,ylim=None):
+    if not os.path.exists(outdir):
+        os.makedirs(outdir)
+    query = uid
+    try:
+        info = adata[[query],:]
+    except:
+        print('{} not detected in gtex, impute as zero'.format(query))
+        info = ad.AnnData(X=csr_matrix(np.full((1,adata.shape[1]),0)),obs=pd.DataFrame(data={'mean':[0]},index=[uid]),var=adata.var) 
+    title = query
+    identifier = query.replace(':','_')
+    df = pd.DataFrame(data={'value':info.X.toarray().squeeze(),'tissue':info.var['tissue'].values},index=info.var_names)
+    tmp = []
+    for tissue,sub_df in df.groupby(by='tissue'):
+        tmp.append((sub_df,sub_df['value'].mean()))
+    sorted_sub_df_list = list(list(zip(*sorted(tmp,key=lambda x:x[1])))[0])
+    tumor_query_value = tumor.loc[query,:].values.squeeze()
+    tumor_sub_df = pd.DataFrame(data={'value':tumor_query_value,'tissue':['tumor']*tumor.shape[1]},index=tumor.columns)
+    sorted_sub_df_list.append(tumor_sub_df)
+
+    fig,ax = plt.subplots(figsize=figsize)
+    x = 0
+    x_list = []
+    y_list = []
+    v_delimiter = [0]
+    xticklabel = []
+    total_number_tissues = len(sorted_sub_df_list)
+    c_list_1 = np.concatenate([np.array(['g']*sub_df.shape[0]) for sub_df in sorted_sub_df_list[:-1]]).tolist()
+    c_list_2 = ['r'] * sorted_sub_df_list[-1].shape[0]
+    c_list = c_list_1 + c_list_2
+
+    sorted_sub_df_list = [df,tumor_sub_df]
+
+    for i,sub_df in enumerate(sorted_sub_df_list):
+        sub_df.sort_values(by='value',inplace=True)
+        n = sub_df.shape[0]
+        xticklabel.append(sub_df['tissue'].iloc[0])
+        for j,v in enumerate(sub_df['value']):
+            x_list.append(x)
+            y_list.append(v)
+            x += 1
+            if j == n-1:
+                v_delimiter.append(x)
+                x += 1
+    ax.scatter(x_list,y_list,s=2,c=c_list,marker='o')
+
+    for v in v_delimiter[1:-1]:
+        ax.axvline(v,linestyle='--',linewidth=0.5)
+    xtick = [(v + v_delimiter[i+1])/2 for i,v in enumerate(v_delimiter[:-1])]
+    ax.set_xticks(xtick)
+    ax.set_xticklabels(xticklabel,rotation=90,fontsize=1)
+    
+    ax.set_title(title)
+    ylabel = 'Raw read counts'
+    ax.set_ylabel(ylabel)
+    ax.set_xlabel('Normal Tissues --> Tumor')
+    if ylim is not None:
+        ax.set_ylim(ylim)
+    plt.savefig(os.path.join(outdir,'gtex_visual_combine_{}.pdf'.format(identifier)),bbox_inches='tight')
     plt.close()
-sys.exit('stop')
 
+# adata = ad.read_h5ad('gtex_gene_subsample.h5ad')
+# outdir = '.'
+# tumor = pd.read_csv('TCGA_SKCM_gene_tpm.txt',sep='\t',index_col=0)
+# gtex_visual_combine(adata,uid='ENSG00000126856',outdir=outdir,tumor=tumor)  # PRDM7
+# gtex_visual_combine(adata,uid='ENSG00000183668',outdir=outdir,tumor=tumor)  # PSG9
+# gtex_visual_combine(adata,uid='ENSG00000243130',outdir=outdir,tumor=tumor)  # PSG11
+# gtex_visual_combine(adata,uid='ENSG00000170848',outdir=outdir,tumor=tumor)  # PSG6   killed
+# gtex_visual_combine(adata,uid='ENSG00000156269',outdir=outdir,tumor=tumor)  # NAA11
+# gtex_visual_combine(adata,uid='ENSG00000166049',outdir=outdir,tumor=tumor)  # PASD1
+# gtex_visual_combine(adata,uid='ENSG00000187772',outdir=outdir,tumor=tumor)  # LIN28B
+# gtex_visual_combine(adata,uid='ENSG00000268009',outdir=outdir,tumor=tumor)  # SSX4  killed
+# gtex_visual_combine(adata,uid='ENSG00000231924',outdir=outdir,tumor=tumor)  # PSG1
+# gtex_visual_combine(adata,uid='ENSG00000242221',outdir=outdir,tumor=tumor)  # PSG2
+# gtex_visual_combine(adata,uid='ENSG00000221826',outdir=outdir,tumor=tumor)  # PSG3
+# gtex_visual_combine(adata,uid='ENSG00000243137',outdir=outdir,tumor=tumor)  # PSG4
+# gtex_visual_combine(adata,uid='ENSG00000204941',outdir=outdir,tumor=tumor)  # PSG5
+# gtex_visual_combine(adata,uid='ENSG00000221878',outdir=outdir,tumor=tumor)  # PSG7
 
+'''junctions'''
+# for TUFM, we use SRR1072223 chr16 to confirm absence in normal skin as well
+# result = pd.read_csv(os.path.join('output_splicing_xy','full_results.txt'),sep='\t',index_col=0)
+# result = result.sort_values(by='mean_sigma')
+# fig,ax = plt.subplots(figsize=(6,4.8))
+# ax.bar(x=np.arange(result.shape[0]),height=result['mean_sigma'].values)
+# # index_MEGA1A = result.index.tolist().index('ENSG00000001461:E6.1-E7.1_24445189')
+# # index_MS4A1 = result.index.tolist().index('ENSG00000149582:E6.2-E7.1')
+# # ax.axvline(x=index_MEGA1A,c='r',linestyle='--')
+# # ax.axvline(x=index_MS4A1,c='r',linestyle='--')
+# ax.set_xlabel('Targets ranked by tumor specificity')
+# ax.set_ylabel('Inferred tumor specificity score')
+# plt.savefig('new_targets_splicing_just_plot.pdf',bbox_inches='tight')
+# plt.close()
 
+'''compare CPM and TPM'''
 # derive CPM from junction count
 # count = pd.read_csv('counts.TCGA-SKCM-steady-state.txt',sep='\t',index_col=0)
 # count.rename(columns=lambda x:'-'.join(x.split('-')[:4]),inplace=True)
@@ -201,6 +308,7 @@ sys.exit('stop')
 #     ax.set_ylabel('Transcripts Per Million (TPM)')
 #     ax.set_title('{},{}'.format(ensg,symbol))
 #     plt.savefig('{}_{}.pdf'.format(ensg,symbol),bbox_inches='tight')
+sys.exit('stop')
 
 # re-sample 25 per tissues for GTEx TPM
 # adata_gtex = ad.read_h5ad('gtex_gene_all.h5ad')
@@ -321,107 +429,6 @@ sys.exit('stop')
 
 
 
-
-# gtex viewer
-def gtex_visual_combine(adata,uid,outdir='.',figsize=(6.4,4.8),tumor=None,ylim=None):
-    if not os.path.exists(outdir):
-        os.makedirs(outdir)
-    query = uid
-    try:
-        info = adata[[query],:]
-    except:
-        print('{} not detected in gtex, impute as zero'.format(query))
-        info = ad.AnnData(X=csr_matrix(np.full((1,adata.shape[1]),0)),obs=pd.DataFrame(data={'mean':[0]},index=[uid]),var=adata.var) 
-    title = query
-    identifier = query.replace(':','_')
-    df = pd.DataFrame(data={'value':info.X.toarray().squeeze(),'tissue':info.var['tissue'].values},index=info.var_names)
-    tmp = []
-    for tissue,sub_df in df.groupby(by='tissue'):
-        tmp.append((sub_df,sub_df['value'].mean()))
-    sorted_sub_df_list = list(list(zip(*sorted(tmp,key=lambda x:x[1])))[0])
-    tumor_query_value = tumor.loc[query,:].values.squeeze()
-    tumor_sub_df = pd.DataFrame(data={'value':tumor_query_value,'tissue':['tumor']*tumor.shape[1]},index=tumor.columns)
-    sorted_sub_df_list.append(tumor_sub_df)
-
-    fig,ax = plt.subplots(figsize=figsize)
-    x = 0
-    x_list = []
-    y_list = []
-    v_delimiter = [0]
-    xticklabel = []
-    total_number_tissues = len(sorted_sub_df_list)
-    c_list_1 = np.concatenate([np.array(['g']*sub_df.shape[0]) for sub_df in sorted_sub_df_list[:-1]]).tolist()
-    c_list_2 = ['r'] * sorted_sub_df_list[-1].shape[0]
-    c_list = c_list_1 + c_list_2
-
-    sorted_sub_df_list = [df,tumor_sub_df]
-
-    for i,sub_df in enumerate(sorted_sub_df_list):
-        sub_df.sort_values(by='value',inplace=True)
-        n = sub_df.shape[0]
-        xticklabel.append(sub_df['tissue'].iloc[0])
-        for j,v in enumerate(sub_df['value']):
-            x_list.append(x)
-            y_list.append(v)
-            x += 1
-            if j == n-1:
-                v_delimiter.append(x)
-                x += 1
-    ax.scatter(x_list,y_list,s=2,c=c_list,marker='o')
-
-    for v in v_delimiter[1:-1]:
-        ax.axvline(v,linestyle='--',linewidth=0.5)
-    xtick = [(v + v_delimiter[i+1])/2 for i,v in enumerate(v_delimiter[:-1])]
-    ax.set_xticks(xtick)
-    ax.set_xticklabels(xticklabel,rotation=90,fontsize=1)
-    
-    ax.set_title(title)
-    ylabel = 'Raw read counts'
-    ax.set_ylabel(ylabel)
-    ax.set_xlabel('Normal Tissues --> Tumor')
-    if ylim is not None:
-        ax.set_ylim(ylim)
-    plt.savefig(os.path.join(outdir,'gtex_visual_combine_{}.pdf'.format(identifier)),bbox_inches='tight')
-    plt.close()
-
-adata = ad.read_h5ad('gtex_gene_subsample.h5ad')
-outdir = 'output_check'
-tumor = pd.read_csv('TCGA_SKCM_gene_tpm.txt',sep='\t',index_col=0)
-gtex_visual_combine(adata,uid='ENSG00000185686',outdir=outdir,tumor=tumor)
-    
-sys.exit('stop')
-
-# # combine PR
-def draw_PR(y_true,y_preds,outdir,outname):
-    plt.figure()
-    baseline = np.sum(np.array(y_true) == 1) / len(y_true)
-    for label,y_pred in y_preds.items():
-        precision,recall,_ = precision_recall_curve(y_true,y_pred,pos_label=1)
-        area_PR = auc(recall,precision)
-        lw = 1
-        plt.plot(recall,precision,lw=lw, label='{} (area = {})'.format(label,round(area_PR,2)))
-        plt.plot([0, 1], [baseline, baseline], color='navy', lw=lw, linestyle='--')
-    plt.xlim([0.0, 1.0])
-    plt.ylim([0.0, 1.1])
-    plt.xlabel('Recall')
-    plt.ylabel('Precision')
-    plt.title('PR curve example')
-    plt.legend(loc="upper right")
-    plt.savefig(os.path.join(outdir,outname),bbox_inches='tight')
-    plt.close()
-
-# y_preds = {}
-# gs = pd.read_csv('gold_standard.txt',sep='\t')['ensg'].values.tolist()
-# base_result = pd.read_csv(os.path.join('output_1','full_results.txt'),sep='\t',index_col=0)
-# base_order = base_result.index
-# for outdir in ['output_sensitivity_82','output_sensitivity_42','output_1','output_sensitivity_24']:
-#     result = pd.read_csv(os.path.join(outdir,'full_results.txt'),sep='\t',index_col=0).loc[base_order,:]
-#     result['label'] = [True if item in gs else False for item in result.index]
-#     y_preds[outdir] = np.negative(result['mean_sigma'].values)
-# draw_PR(result['label'].values,y_preds,'.','PR_curve_sensitivity_test.pdf')
-
-
-# deg check
 
 
 

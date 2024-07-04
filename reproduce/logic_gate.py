@@ -93,77 +93,77 @@ pairs = list(combinations(ensgs,2))
 # final_protein.to_csv('final_protein.txt',sep='\t',index=None)
 
 
-# post-analysis
-result = pd.read_csv(os.path.join('output_logic_gate_xyz','full_results.txt'),sep='\t',index_col=0)
-col = []
-for item in result.index:
-    no1,no2 = item.split(',')
-    gene1 = ensg2symbol[no1]
-    gene2 = ensg2symbol[no2]
-    col.append(','.join([gene1,gene2]))
-result['gene_symbols'] = col
+# # post-analysis
+# result = pd.read_csv(os.path.join('output_logic_gate_xyz','full_results.txt'),sep='\t',index_col=0)
+# col = []
+# for item in result.index:
+#     no1,no2 = item.split(',')
+#     gene1 = ensg2symbol[no1]
+#     gene2 = ensg2symbol[no2]
+#     col.append(','.join([gene1,gene2]))
+# result['gene_symbols'] = col
 
-# compare to their respective single arm
-db = pd.read_csv(os.path.join('output_xyz','full_results.txt'),sep='\t',index_col=0)
-gene2sigma = db['mean_sigma'].to_dict()
-col1 = []
-col2 = []
-col3 = []
-col4 = []
-for item,sigma in zip(result.index.values,result['mean_sigma']):
-    t1,t2 = item.split(',')
-    sigma1 = gene2sigma[t1]
-    sigma2 = gene2sigma[t2]
-    delta1 = sigma - sigma1
-    delta2 = sigma - sigma2
-    col1.append(sigma1)
-    col2.append(sigma2)
-    col3.append(delta1)
-    col4.append(delta2)
-result['sigma1'] = col1
-result['sigma2'] = col2
-result['delta1'] = col3
-result['delta2'] = col4
-result.to_csv(os.path.join('output_logic_gate_xyz','full_results_post.txt'),sep='\t')
+# # compare to their respective single arm
+# db = pd.read_csv(os.path.join('output_xyz','full_results.txt'),sep='\t',index_col=0)
+# gene2sigma = db['mean_sigma'].to_dict()
+# col1 = []
+# col2 = []
+# col3 = []
+# col4 = []
+# for item,sigma in zip(result.index.values,result['mean_sigma']):
+#     t1,t2 = item.split(',')
+#     sigma1 = gene2sigma[t1]
+#     sigma2 = gene2sigma[t2]
+#     delta1 = sigma - sigma1
+#     delta2 = sigma - sigma2
+#     col1.append(sigma1)
+#     col2.append(sigma2)
+#     col3.append(delta1)
+#     col4.append(delta2)
+# result['sigma1'] = col1
+# result['sigma2'] = col2
+# result['delta1'] = col3
+# result['delta2'] = col4
+# result.to_csv(os.path.join('output_logic_gate_xyz','full_results_post.txt'),sep='\t')
 
 
-# heatmap
-reversed_result = result.copy()
-reversed_result['gene_symbols'] = [','.join([item.split(',')[1],item.split(',')[0]]) for item in result['gene_symbols']]
-result = pd.concat([result,reversed_result],axis=0)
+# # heatmap
+# reversed_result = result.copy()
+# reversed_result['gene_symbols'] = [','.join([item.split(',')[1],item.split(',')[0]]) for item in result['gene_symbols']]
+# result = pd.concat([result,reversed_result],axis=0)
 
-col1 = [item.split(',')[0] for item in result['gene_symbols']]
-col2 = [item.split(',')[1] for item in result['gene_symbols']]
-result['gene1'] = col1
-result['gene2'] = col2
-result_new = result.loc[:,['mean_sigma','gene1','gene2']]
+# col1 = [item.split(',')[0] for item in result['gene_symbols']]
+# col2 = [item.split(',')[1] for item in result['gene_symbols']]
+# result['gene1'] = col1
+# result['gene2'] = col2
+# result_new = result.loc[:,['mean_sigma','gene1','gene2']]
 
-df = result_new.groupby(by=['gene1','gene2'])['mean_sigma'].mean().unstack(fill_value=1)
+# df = result_new.groupby(by=['gene1','gene2'])['mean_sigma'].mean().unstack(fill_value=1)
 
-u_indices = np.triu_indices(df.shape[0],k=1)
-u_values = df.values[u_indices]
-reshaped_u_indices = [(i,j) for i,j in zip(*u_indices)] 
-new_reshaped_u_indices = []
-for u_i,u_v in zip(reshaped_u_indices,u_values):
-    if u_v > 0:
-        new_reshaped_u_indices.append(u_i)
-new_u_indices = list(zip(*new_reshaped_u_indices))
-new_u_indices = tuple([np.array(item) for item in new_u_indices])
-tmp = df.values.T
-tmp[new_u_indices] = df.values[new_u_indices]
-new = tmp.T
-new_df = pd.DataFrame(data=new,index=df.index,columns=df.columns)
+# u_indices = np.triu_indices(df.shape[0],k=1)
+# u_values = df.values[u_indices]
+# reshaped_u_indices = [(i,j) for i,j in zip(*u_indices)] 
+# new_reshaped_u_indices = []
+# for u_i,u_v in zip(reshaped_u_indices,u_values):
+#     if u_v > 0:
+#         new_reshaped_u_indices.append(u_i)
+# new_u_indices = list(zip(*new_reshaped_u_indices))
+# new_u_indices = tuple([np.array(item) for item in new_u_indices])
+# tmp = df.values.T
+# tmp[new_u_indices] = df.values[new_u_indices]
+# new = tmp.T
+# new_df = pd.DataFrame(data=new,index=df.index,columns=df.columns)
 
-sorted_gene = [ensg2symbol[item] for item in target.sort_values(by='mean_sigma',ascending=True).index]
-new_df = new_df.loc[sorted_gene,sorted_gene]
+# sorted_gene = [ensg2symbol[item] for item in target.sort_values(by='mean_sigma',ascending=True).index]
+# new_df = new_df.loc[sorted_gene,sorted_gene]
 
-fig,ax = plt.subplots()
-sns.heatmap(new_df,mask=np.triu(new_df.values,k=0),cmap='viridis',xticklabels=1,yticklabels=1,ax=ax)
-ax.set_xticklabels(ax.get_xticklabels(), fontsize=1)
-ax.set_yticklabels(ax.get_yticklabels(), fontsize=1)
-plt.savefig(os.path.join('output_logic_gate_xyz','heatmap_lower_new.pdf'),bbox_inches='tight')
-plt.close()
-sys.exit('stop')
+# fig,ax = plt.subplots()
+# sns.heatmap(new_df,mask=np.triu(new_df.values,k=0),cmap='viridis',xticklabels=1,yticklabels=1,ax=ax)
+# ax.set_xticklabels(ax.get_xticklabels(), fontsize=1)
+# ax.set_yticklabels(ax.get_yticklabels(), fontsize=1)
+# plt.savefig(os.path.join('output_logic_gate_xyz','heatmap_lower_new.pdf'),bbox_inches='tight')
+# plt.close()
+
 
 # visualize pair
 
@@ -199,7 +199,7 @@ def gtex_visual_combine_barplot(adata,uid,outdir='.',ylim=None,facecolor='#D9906
 # TNFRSF13B,IL1RAP
 adata_single = ad.read_h5ad('gtex_gene_subsample.h5ad')
 adata_pair = ad.read_h5ad('adata_final.h5ad')
-gtex_visual_combine_barplot(adata_single,'ENSG00000240505','output_logic_gate_xyz',ylim=(0,30),facecolor='#D99066')
-gtex_visual_combine_barplot(adata_single,'ENSG00000196083','output_logic_gate_xyz',ylim=(0,30),facecolor='#50BF80')
-gtex_visual_combine_barplot(adata_pair,'ENSG00000240505,ENSG00000196083','output_logic_gate_xyz',ylim=(0,30),facecolor='#795D8C')
+gtex_visual_combine_barplot(adata_single,'ENSG00000240505','output_logic_gate_xyz',ylim=(0,40),facecolor='#D99066')
+gtex_visual_combine_barplot(adata_single,'ENSG00000196083','output_logic_gate_xyz',ylim=(0,40),facecolor='#50BF80')
+gtex_visual_combine_barplot(adata_pair,'ENSG00000240505,ENSG00000196083','output_logic_gate_xyz',ylim=(0,40),facecolor='#795D8C')
 
