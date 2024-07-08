@@ -108,8 +108,6 @@ python BayesTS.py --input "junction.h5ad"
 
 Li, Guangyuan, Anukana Bhattacharjee, and Nathan Salomonis. 2023. “Quantifying Tumor Specificity Using Bayesian Probabilistic Modeling for Drug Target Discovery and Prioritization.” bioRxiv. https://www.biorxiv.org/content/10.1101/2023.03.03.530994v1
 
-Guangyuan Li et al. ,Splicing neoantigen discovery with SNAF reveals shared targets for cancer immunotherapy.Sci. Transl. Med.16,eade2886(2024).DOI:10.1126/scitranslmed.ade2886 (https://www.science.org/doi/10.1126/scitranslmed.ade2886)
-
 - If you are using Version 2 (Current Version):
 
 Quantifying tumor specificity using Bayesian probabilistic modeling for drug and immunotherapeutic target discovery, In Revision
