@@ -3,11 +3,11 @@ Quantifying Tumor Specificity using Bayesian probabilistic modeling for drug tar
 
  - Access BayesTS database for the tumor specifcity of 13,350 protein coding genes with both RNA and protein information [here](./database/full_results_XYZ.txt).
 
- - Retrain the BayesTS model to adjust tissue importance see [here](https://github.com/frankligy/BayesTS#adjust-tissue-importance).
+ - Retrain the BayesTS model to adjust tissue importance see [here](https://github.com/frankligy/BayesTS?tab=readme-ov-file#retrain-or-adjust-tissue-importance).
 
  - Extend BayesTS by incorporting additional modalities (i.e. logFC) see [here](https://github.com/frankligy/BayesTS/extension).
 
- - Apply BayesTS to [SNAF](https://github.com/frankligy/SNAF) splicing junctions see [here](https://github.com/frankligy/BayesTS#interface-with-snaf)
+ - Apply BayesTS to [SNAF](https://github.com/frankligy/SNAF) splicing junctions see [here](https://github.com/frankligy/BayesTS?tab=readme-ov-file#interface-with-snaf)
 
  Please feel free to contact me if I can help clarify anything, contact is at the bottom.
 
@@ -16,7 +16,6 @@ Quantifying Tumor Specificity using Bayesian probabilistic modeling for drug tar
 
  ![overview](./images/fig1.png)
 
- # Use or extend the BayesTS
 
  ## Installation
 
@@ -94,7 +93,7 @@ optional arguments:
 
 ## Interface with SNAF
 
-In SNAF, you are able to get a h5ad file with all the splicing junctions you'd like to query, let's say the file name is `junction.h5ad`
+In [SNAF](https://github.com/frankligy/SNAF), you are able to [get a h5ad file](https://snaf.readthedocs.io/en/latest/api.html#get-all-normal-h5ad) with all the splicing junctions you'd like to query, let's say the file name is `junction.h5ad`
 
 ```bash
 python BayesTS.py --input "junction.h5ad"
