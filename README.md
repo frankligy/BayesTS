@@ -5,7 +5,7 @@ Quantifying Tumor Specificity using Bayesian probabilistic modeling for drug tar
 
  - Retrain the BayesTS model to adjust tissue importance see [here](https://github.com/frankligy/BayesTS?tab=readme-ov-file#retrain-or-adjust-tissue-importance).
 
- - Extend BayesTS by incorporting additional modalities (i.e. logFC) see [here](https://github.com/frankligy/BayesTS/extension).
+ - Extend BayesTS by incorporting additional modalities (i.e. logFC) see [here](https://github.com/frankligy/BayesTS/tree/main/extension).
 
  - Apply BayesTS to [SNAF](https://github.com/frankligy/SNAF) splicing junctions see [here](https://github.com/frankligy/BayesTS?tab=readme-ov-file#interface-with-snaf)
 
