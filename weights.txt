@@ -1,0 +1,2 @@
+tissue	weight
+tonsil	0.5
