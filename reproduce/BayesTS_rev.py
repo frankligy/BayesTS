@@ -41,9 +41,9 @@ def compute_y(adata,uids,tpm=True):
         y = info.X.toarray() / adata.var['total_count'].values.reshape(1,-1)
     return y
 
-def compute_scaled_x(adata,uids,cutoff):
+def compute_scaled_x(adata,uids,cutoff,min_sample):
     total_tissue = adata.var['tissue'].unique()
-    valid_tissue = [tissue for tissue in total_tissue if adata[:,adata.var['tissue']==tissue].shape[1] >= 10]
+    valid_tissue = [tissue for tissue in total_tissue if adata[:,adata.var['tissue']==tissue].shape[1] >= min_sample]
     x = np.zeros((len(uids),len(valid_tissue)))
     for i,tissue in enumerate(valid_tissue):
         sub = adata[uids,adata.var['tissue']==tissue]
@@ -61,10 +61,10 @@ def get_thresholded_adata(adata,cond_Y):
     adata.X = csr_matrix(np.where(cond_Y,adata.X.toarray(),0))
     return adata
 
-def weighting(adata,dic,t):
+def weighting(adata,dic,t,min_sample):
     weights = np.full(t,0.5)  # here the t will be number of valid_tissue
     total_tissue = adata.var['tissue'].unique()
-    valid_tissue = [tissue for tissue in total_tissue if adata[:,adata.var['tissue']==tissue].shape[1] >= 10]
+    valid_tissue = [tissue for tissue in total_tissue if adata[:,adata.var['tissue']==tissue].shape[1] >= min_sample]
     for t,w in dic.items():
         try:
             i = valid_tissue.index(t)
@@ -629,10 +629,10 @@ def train_and_infer(model,guide,*args):
     with pyro.plate('samples',1000,dim=-1):
         samples = guide(*args)
     svi_sigma = samples['sigma']  # torch.Size([1000, n])
-    prior_sigma = svi_sigma.data.cpu().numpy().mean(axis=0)
+    prior_sigma = np.nanmean(svi_sigma.data.cpu().numpy(),axis=0)   # it could be nan
 
     try:
-        n_steps = 5000
+        n_steps = epoch
         pyro.clear_param_store()
         svi = SVI(model, guide, adam, loss=Trace_ELBO())
         losses = []
@@ -653,7 +653,7 @@ def train_and_infer(model,guide,*args):
         with pyro.plate('samples',1000,dim=-1):
             samples = guide(*args)
         svi_sigma = samples['sigma']  # torch.Size([1000, n])
-        sigma = svi_sigma.data.cpu().numpy().mean(axis=0)
+        sigma = np.nanmean(svi_sigma.data.cpu().numpy(),axis=0)
 
         alpha = pyro.param('alpha').data.cpu().numpy()
         beta = pyro.param('beta').data.cpu().numpy()
@@ -729,13 +729,13 @@ def generate_inputs(adata,protein,dic):
     #     annotated_x.to_csv('annotated_x_{}.txt'.format(str(cutoff)),sep='\t')
     #     result.to_csv('result_{}.txt'.format(str(cutoff)),sep='\t')
 
-    best_cutoff = 3
-    X, annotated_x = compute_scaled_x(adata,uids,best_cutoff)  # 13350 * 49
+    best_cutoff = cutoff
+    X, annotated_x = compute_scaled_x(adata,uids,best_cutoff,min_sample)  # 13350 * 49
 
     n = X.shape[0]
     s = Y.shape[1]
     t = X.shape[1]
-    weights = weighting(adata,dic,t)
+    weights = weighting(adata,dic,t,min_sample)
     
 
     return X,Y,Z,weights,uids,ebayes_beta_y
@@ -749,7 +749,7 @@ def train_single(model,guide,name,*args):
     elbo = Trace_ELBO()
 
     try:
-        n_steps = 5000
+        n_steps = epoch
         pyro.clear_param_store()
         svi = SVI(model, guide, adam, loss=Trace_ELBO())
         losses = []
@@ -880,7 +880,7 @@ def benchmark_gs():
 
 def main(args):
 
-    global adata,dic,n,s,t,p,device,uids,outdir,prior_alpha,prior_beta,protein,mode
+    global adata,dic,n,s,t,p,device,uids,outdir,prior_alpha,prior_beta,protein,mode,cutoff,min_sample,epoch
 
     adata = ad.read_h5ad(args.input)
     dic = pd.read_csv(args.weight,sep='\t',index_col=0)['weight'].to_dict()
@@ -889,6 +889,9 @@ def main(args):
     prior_beta = args.prior_beta
     protein = args.protein
     mode = args.mode
+    cutoff = args.noise  # this is the only tunable cutoffs that we carefully derive from empirical data
+    min_sample = args.min_sample
+    epoch = args.epoch
 
     if not os.path.exists(outdir):
         os.makedirs(outdir)
@@ -1095,6 +1098,9 @@ if __name__ == '__main__':
     parser.add_argument('--outdir',type=str,default='.',help='path to the output directory')
     parser.add_argument('--prior_alpha',type=float,default=2.0,help='alpha for the beta prior')
     parser.add_argument('--prior_beta',type=float,default=2.0,help='beta for the beta prior')
+    parser.add_argument('--noise',type=float,default=3.0,help='derived noise signal boundary from the data')
+    parser.add_argument('--min_sample',type=int,default=10,help='only consider tissues with more than min_sample')
+    parser.add_argument('--epoch',type=int,default=5000,help='total epochs to train')
     args = parser.parse_args()
     main(args)
 

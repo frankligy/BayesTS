@@ -13,10 +13,22 @@ from sklearn.metrics import precision_recall_curve,auc,roc_curve,accuracy_score
 import pickle
 import pyro.distributions as dist
 import torch
+from scipy.sparse import csr_matrix
 
 mpl.rcParams['pdf.fonttype'] = 42
 mpl.rcParams['ps.fonttype'] = 42
 mpl.rcParams['font.family'] = 'Arial'
+
+
+'''curate a ERV'''
+normal_erv = pd.read_csv('/gpfs/data/yarmarkovichlab/Frank/immunopeptidome_project/NeoVerse/GTEx/selected/hg38_telocal_intron/normal_erv.txt',sep='\t',index_col=0)
+normal_erv_aux = pd.read_csv('/gpfs/data/yarmarkovichlab/Frank/immunopeptidome_project/NeoVerse/GTEx/selected/hg38_telocal_intron/normal_erv_aux_df.txt',sep='\t',index_col=0)
+erv_data = normal_erv.values / normal_erv_aux['total_count'].values.reshape(1,-1) * 1e6
+adata = ad.AnnData(X=csr_matrix(erv_data),obs=pd.DataFrame(index=normal_erv.index),var=pd.DataFrame(index=normal_erv.columns))
+adata.var['tissue'] = [item.split(',')[1] for item in adata.var_names]
+adata.obs['mean'] = erv_data.mean(axis=1)
+adata.write('adata_erv.h5ad')
+sys.exit('stop')
 
 '''reproducibility result, which also have tau and each modality'''
 def draw_PR(y_true,y_preds,outdir,outname):
@@ -433,12 +445,45 @@ def gtex_visual_combine(adata,uid,outdir='.',figsize=(6.4,4.8),tumor=None,ylim=N
 
 
 '''threshold the gene matrix when deriving the tissue distribution'''
-dic = {}
-for cutoff in np.arange(0,10,0.25):
-    result_path = 'result_{}.txt'.format(str(cutoff))
-    result = pd.read_csv(result_path,sep='\t',index_col=0)
-    repr_spearman = np.nanmean(result['spearman'].values)
-    repr_aupr = np.nanmean(result['aupr'].values)
-    dic[cutoff] = ((repr_spearman,repr_aupr))
+# dic = {}
+# for cutoff in np.arange(0,10,0.25):
+#     result_path = 'result_{}.txt'.format(str(cutoff))
+#     result = pd.read_csv(result_path,sep='\t',index_col=0)
+#     repr_spearman = np.nanmean(result['spearman'].values)
+#     repr_aupr = np.nanmean(result['aupr'].values)
+#     dic[cutoff] = ((repr_spearman,repr_aupr))
+
+'''add gene symbol'''
+def ensemblgene_to_symbol(query,species):
+    # assume query is a list, will also return a list
+    import mygene
+    mg = mygene.MyGeneInfo()
+    out = mg.querymany(query,scopes='ensemblgene',fileds='symbol',species=species,returnall=True,as_dataframe=True,df_index=True)
+    result = out['out']['symbol'].fillna('unknown_gene').tolist()
+    try:
+        assert len(query) == len(result)
+    except AssertionError:    # have duplicate results
+        df = out['out']
+        df_unique = df.loc[~df.index.duplicated(),:]
+        result = df_unique['symbol'].fillna('unknown_gene').tolist()
+    return result
+
+# outdir = 'ablation/output_xyz'
+# df = pd.read_csv(os.path.join(outdir,'full_results.txt'),sep='\t',index_col=0)
+# ensgs = list(set(df.index.tolist()))
+# symbols = ensemblgene_to_symbol(ensgs,'human')
+# mapping = {item1:item2 for item1,item2 in zip(ensgs,symbols)}
+# df['gene_symbol'] = df.index.map(mapping).values
+# df.rename(columns={'mean_sigma':'BayesTS'},inplace=True)
+# df.to_csv('full_results_XYZ.txt',sep='\t')
+
+# outdir = 'output_no_xy'
+# df = pd.read_csv(os.path.join(outdir,'full_results.txt'),sep='\t',index_col=0)
+# ensgs = list(set(df.index.tolist()))
+# symbols = ensemblgene_to_symbol(ensgs,'human')
+# mapping = {item1:item2 for item1,item2 in zip(ensgs,symbols)}
+# df['gene_symbol'] = df.index.map(mapping).values
+# df.rename(columns={'mean_sigma':'BayesTS'},inplace=True)
+# df.to_csv('full_results_XY.txt',sep='\t')
 
 
