@@ -2,13 +2,13 @@
 
 There are three ways users can extend BayesTS model:
 
-* Construct New AnnData
-* Incorporate New Modality through `custom.py`
-* Using posterior as the new prior for any other model
+* Construct New AnnData [see here](https://github.com/frankligy/BayesTS/tree/main/extension#construct-new-anndata)
+* Incorporate New Modality through `custom.py` [see here](https://github.com/frankligy/BayesTS/tree/main/extension#incorporate-new-modalities-through-custompy)
+* Using posterior as the new prior for any other model [see here](https://github.com/frankligy/BayesTS/tree/main/extension#using-posterior-as-new-prior)
 
 ### Construct New AnnData
 
-1. Construct a new `AnnData` with other modalities such as splicing junction or any features. You `AnnData` should be uniformly like following:
+Construct a new `AnnData` with other modalities such as splicing junction or any features. You `AnnData` should be uniformly like following:
 
 ```
                  tisse_type      tissue_type    ...      tissue_type       
