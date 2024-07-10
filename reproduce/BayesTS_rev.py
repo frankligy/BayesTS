@@ -676,6 +676,11 @@ def train_and_infer(model,guide,*args):
         df['Y_mean'] = Y_mean
         df['X_mean'] = X_mean
         df['Z_mean'] = Z_mean
+
+        # add a quantile
+        df = df.sort_values(by='mean_sigma')
+        df['percentile'] = [(i+1)/df.shape[0] for i in np.arange(df.shape[0])]
+
         df.to_csv(os.path.join(outdir,'full_results.txt'),sep='\t')
     except Exception as e:
         print(e)

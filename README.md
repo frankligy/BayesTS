@@ -1,11 +1,11 @@
 # BayesTS
 Quantifying Tumor Specificity using Bayesian probabilistic modeling for drug target discovery and prioritization
 
- - Access BayesTS database for the tumor specifcity of 13,350 protein coding genes with both RNA and protein information [here](./database/full_results_XYZ.txt).
+ - Access BayesTS database for the tumor specifcity of human genes [has protien stain](./database/full_results_XYZ.txt) or [all genes with RNA](./database/full_results_XY.txt).
 
  - Retrain the BayesTS model to adjust tissue importance see [here](https://github.com/frankligy/BayesTS?tab=readme-ov-file#retrain-or-adjust-tissue-importance).
 
- - Extend BayesTS by incorporting additional modalities (i.e. logFC) see [here](https://github.com/frankligy/BayesTS/tree/main/extension).
+ - Extend BayesTS by incorporting additional modalities (i.e. logFC, splicing junction) see [here](https://github.com/frankligy/BayesTS/tree/main/extension).
 
  - Apply BayesTS to [SNAF](https://github.com/frankligy/SNAF) splicing junctions see [here](https://github.com/frankligy/BayesTS?tab=readme-ov-file#interface-with-snaf)
 
@@ -72,6 +72,8 @@ Full prompt:
 usage: BayesTS_rev.py [-h] [--input INPUT] [--weight WEIGHT] [--mode MODE]
                       [--protein PROTEIN] [--outdir OUTDIR]
                       [--prior_alpha PRIOR_ALPHA] [--prior_beta PRIOR_BETA]
+                      [--noise NOISE] [--min_sample MIN_SAMPLE]
+                      [--epoch EPOCH]
 
 Run BayesTS to retrain
 
@@ -87,6 +89,10 @@ optional arguments:
                         alpha for the beta prior
   --prior_beta PRIOR_BETA
                         beta for the beta prior
+  --noise NOISE         derived noise signal boundary from the data
+  --min_sample MIN_SAMPLE
+                        only consider tissues with more than min_sample
+  --epoch EPOCH         total epochs to train
 ```
 
 

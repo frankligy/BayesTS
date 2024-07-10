@@ -32,28 +32,22 @@ mpl.rcParams['font.family'] = 'Arial'
 
 global N,subsample_size
 
-N = None   # used when it is just point estimate not a data distribution
-subsample_size = 10   # do not exceed the total number of observations
+N = 100
+subsample_size = 10
 
 def generate_and_configure(uids):
-
-    tumor_erv = pd.read_csv('/gpfs/data/yarmarkovichlab/Frank/pan_cancer/atlas/DLBC/tumor_erv.txt',sep='\t',index_col=0)
-    tumor_erv_aux = pd.read_csv('/gpfs/data/yarmarkovichlab/Frank/pan_cancer/atlas/DLBC/tumor_erv_aux_df.txt',sep='\t',index_col=0)
-    erv = pd.read_csv('/gpfs/data/yarmarkovichlab/Frank/pan_cancer/atlas/DLBC/ERV.txt',sep='\t',index_col=0)
-
-    total = 48
-    f_cutoff = 0.5
-    valid_erv = erv.loc[erv['n_sample']>total*f_cutoff,:].index
-    tumor_erv = tumor_erv.loc[valid_erv,:]
-
-    erv_data = tumor_erv.values / tumor_erv_aux['total_count'].values.reshape(1,-1) * 1e6
-
-    CUSTOM_df = pd.DataFrame(data=erv_data,index=tumor_erv.index,columns=tumor_erv.columns)
+    deg = pd.read_csv('/gpfs/data/yarmarkovichlab/Frank/BayesTS/revision/deg.txt',sep='\t',index_col='Gene ID')
+    ensg2lfc = deg['Log2(Fold Change)'].to_dict()
+    CUSTOM = np.empty((len(ensg2lfc),N),dtype=np.float32)
+    from scipy.stats import norm
+    for i,lfc in enumerate(ensg2lfc.values()):
+        CUSTOM[i,:] = norm.rvs(loc=lfc,scale=0.5,size=N)
+    CUSTOM_df = pd.DataFrame(data=CUSTOM,index=list(ensg2lfc.keys()),columns=['sample_{}'.format(i+1) for i in range(N)])
 
     '''
-    The CUSTOM_df should be a dataframe where index are ensg/feature id, and columns are observations (any property) of this gene in a set of samples.
-    If incorporating a point estimate such as log fold change in this case, we randomly sample N data points as observations using normal distribution.
-    If incorporating a set of observations, then it is naturally making sense.
+    The CUSTOM_df should be a dataframe where index are ensg id, and columns are observations (any property) of this gene in a set of samples.
+    In the context of incorporating the log fold change value, it will be lfc values, you can use normal expression to generate such samples when
+    only singular value is available or you'd like to expand the sample size.
 
                 lfc_obs_1      lfc_obs_2        lfc_obs_3      ...     lfc_obs_n
     ensg1
@@ -63,22 +57,18 @@ def generate_and_configure(uids):
     '''
 
     common = list(set(CUSTOM_df.index).intersection(set(uids)))
-    order = [uids.index(item) for item in tqdm(common)]
+    order = [uids.index(item) for item in common]
     CUSTOM_df = CUSTOM_df.loc[common,:]
     CUSTOM = CUSTOM_df.values
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    CUSTOM = torch.tensor(CUSTOM.T,device=device)   # n_obs * n_common_feature
+    CUSTOM = torch.tensor(CUSTOM.T,device=device)   # 100 * 6266
 
     return CUSTOM, common, order, device
 
 def model_custom(CUSTOM,device):
 
-    '''
-    Users need to define the data generation process to match the specific prior knowledge frmo sigma
-    '''
     n = CUSTOM.shape[1]
-    N = CUSTOM.shape[0]
 
     a = torch.tensor(2.0, device=device)
     b = torch.tensor(2.0, device=device)
@@ -90,11 +80,11 @@ def model_custom(CUSTOM,device):
 
     with pyro.poutine.scale(scale=1), pyro.plate('data_CUSTOM', N, subsample_size=subsample_size) as ind:
         ind = ind.to(device=device)
-        custom = pyro.sample('custom',
+        lfc = pyro.sample('lfc',
                           dist.Normal(-torch.log10(sigma) * beta_custom, 0.5).expand([subsample_size, n]).to_event(1),
                           obs=CUSTOM.index_select(0, ind))
 
-    return {'custom': custom}
+    return {'lfc': lfc}
 
 def guide_custom(CUSTOM,device):
 
@@ -148,14 +138,13 @@ def model_X_Y_custom(X,Y,CUSTOM,weights,ebayes_beta_y,t,s,device,w_x,w_y,w_custo
         nc = pyro.sample('nc',dist.LogNormal(beta_y*sigma,0.5).expand([subsample_size,n]).to_event(1),obs=Y.index_select(0,ind))
 
     '''CUSTOM'''
-    N = CUSTOM.shape[0]
     with pyro.poutine.scale(scale=w_custom), pyro.plate('data_CUSTOM', N, subsample_size=subsample_size) as ind:
         ind = ind.to(device=device)
-        custom = pyro.sample('custom',
+        lfc = pyro.sample('lfc',
                           dist.Normal(-torch.log10(sigma) * beta_custom, 0.5).expand([subsample_size, n]).to_event(1),
                           obs=CUSTOM.index_select(0, ind))
 
-    return {'c':c,'nc':nc,'custom':custom}
+    return {'c':c,'nc':nc,'lfc':lfc}
 
 
 
