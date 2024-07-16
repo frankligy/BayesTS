@@ -21,14 +21,14 @@ mpl.rcParams['font.family'] = 'Arial'
 
 
 '''curate a ERV'''
-normal_erv = pd.read_csv('/gpfs/data/yarmarkovichlab/Frank/immunopeptidome_project/NeoVerse/GTEx/selected/hg38_telocal_intron/normal_erv.txt',sep='\t',index_col=0)
-normal_erv_aux = pd.read_csv('/gpfs/data/yarmarkovichlab/Frank/immunopeptidome_project/NeoVerse/GTEx/selected/hg38_telocal_intron/normal_erv_aux_df.txt',sep='\t',index_col=0)
-erv_data = normal_erv.values / normal_erv_aux['total_count'].values.reshape(1,-1) * 1e6
-adata = ad.AnnData(X=csr_matrix(erv_data),obs=pd.DataFrame(index=normal_erv.index),var=pd.DataFrame(index=normal_erv.columns))
-adata.var['tissue'] = [item.split(',')[1] for item in adata.var_names]
-adata.obs['mean'] = erv_data.mean(axis=1)
-adata.write('adata_erv.h5ad')
-sys.exit('stop')
+# normal_erv = pd.read_csv('/gpfs/data/yarmarkovichlab/Frank/immunopeptidome_project/NeoVerse/GTEx/selected/hg38_telocal_intron/normal_erv.txt',sep='\t',index_col=0)
+# normal_erv_aux = pd.read_csv('/gpfs/data/yarmarkovichlab/Frank/immunopeptidome_project/NeoVerse/GTEx/selected/hg38_telocal_intron/normal_erv_aux_df.txt',sep='\t',index_col=0)
+# erv_data = normal_erv.values / normal_erv_aux['total_count'].values.reshape(1,-1) * 1e6
+# adata = ad.AnnData(X=csr_matrix(erv_data),obs=pd.DataFrame(index=normal_erv.index),var=pd.DataFrame(index=normal_erv.columns))
+# adata.var['tissue'] = [item.split(',')[1] for item in adata.var_names]
+# adata.obs['mean'] = erv_data.mean(axis=1)
+# adata.write('adata_erv.h5ad')
+
 
 '''reproducibility result, which also have tau and each modality'''
 def draw_PR(y_true,y_preds,outdir,outname):
@@ -60,43 +60,71 @@ def draw_PR(y_true,y_preds,outdir,outname):
 # draw_PR(result['label'].values,y_preds,'reproducibility','PR_curve_reproducibility_test.pdf')
 
 '''deg'''
-# ensg2biotype = pd.read_csv('gene_lfc.txt',sep='\t',index_col=0)['biotype'].to_dict()
-# hpa = pd.read_csv('proteinatlas.tsv',sep='\t')
-# hpa = hpa.loc[hpa['RNA tissue specificity'].isin(['Tissue enriched','Group enriched','Not detected','Tissue enhanced']),:]
-# cond1 = [True if isinstance(item,str) and 'Tumor antigen' in item else False for item in hpa['Molecular function']]
-# cond2 = [True if isinstance(item,str) and 'melanoma' in item else False for item in hpa['RNA cancer specific FPKM']]
-# cond = np.any([cond1,cond2],axis=0).tolist()
-# hpa = hpa.loc[cond,:]
+# suggestion to use all normal tissues to run limma
+# to run that in altanalyze, I need exp.original-steady-state, groups and comps
+# adata = ad.read_h5ad('gtex_gene_subsample.h5ad')
+# tpm_normal = adata.to_df()
+# tpm_tcga = pd.read_csv('TCGA_SKCM_gene_tpm.txt',sep='\t',index_col=0)
+# tpm_all = pd.concat([tpm_tcga,tpm_normal],join='inner',axis=1)
+# tpm_all.to_csv('exp.original-steady-state.txt',sep='\t')
+# with open('groups.txt','w') as f:
+#     for item in tpm_all.columns:
+#         if item.startswith('TCGA'):
+#             f.write('{}\t{}\t{}\n'.format(item,1,'tumor'))
+#         elif item.startswith('GTEX'):
+#             f.write('{}\t{}\t{}\n'.format(item,2,'normal'))
+# with open('comps.txt','w') as f:
+#     f.write('1\t2\n')
 
-# gs = hpa['Ensembl'].values.tolist()
-# result = pd.read_csv(os.path.join('output_xyc','full_results.txt'),sep='\t',index_col=0)
-# result['biotype'] = result.index.map(ensg2biotype).values
-# result = result.loc[result['biotype']=='protein_coding',:]
-# result['label'] = [True if item in gs else False for item in result.index]
-# deg = pd.read_csv('/gpfs/data/yarmarkovichlab/Frank/BayesTS/revision/deg.txt',sep='\t',index_col='Gene ID')
-# ensg2adjp = deg['adjp'].to_dict()
-# ensg2lfc = deg['Log2(Fold Change)'].to_dict()
-# result['limma_adjp'] = result.index.map(ensg2adjp).values
-# result['limma_lfc'] = result.index.map(ensg2lfc).values
-# result = result.loc[result['limma_adjp'].notna(),:]
-# result = result.loc[result['limma_lfc'].notna(),:]
 
-# from scipy.stats import rankdata
+ensg2biotype = pd.read_csv('gene_lfc.txt',sep='\t',index_col=0)['biotype'].to_dict()
+hpa = pd.read_csv('proteinatlas.tsv',sep='\t')
+hpa = hpa.loc[hpa['RNA tissue specificity'].isin(['Tissue enriched','Group enriched','Not detected','Tissue enhanced']),:]
+cond1 = [True if isinstance(item,str) and 'Tumor antigen' in item else False for item in hpa['Molecular function']]
+cond2 = [True if isinstance(item,str) and 'melanoma' in item else False for item in hpa['RNA cancer specific FPKM']]
+cond = np.any([cond1,cond2],axis=0).tolist()
+hpa = hpa.loc[cond,:]
 
-# result['lfc_rank'] = rankdata(np.negative(result['limma_lfc'].values),method='min')
-# result['adjp_rank'] = rankdata(result['limma_adjp'].values,method='min')
-# result['limma_rank'] = [(r1+r2)/2 for r1,r2 in zip(result['lfc_rank'],result['adjp_rank'])]
+gs = hpa['Ensembl'].values.tolist()
+result = pd.read_csv(os.path.join('output_xyc','full_results.txt'),sep='\t',index_col=0)
+result['biotype'] = result.index.map(ensg2biotype).values
+result = result.loc[result['biotype']=='protein_coding',:]
+result['label'] = [True if item in gs else False for item in result.index]
+deg = pd.read_csv('/gpfs/data/yarmarkovichlab/Frank/BayesTS/revision/deg.txt',sep='\t',index_col='Gene ID')
+ensg2adjp_skin_only = deg['adjp'].to_dict()
+ensg2lfc_skin_only = deg['Log2(Fold Change)'].to_dict()
+deg = pd.read_csv('/gpfs/data/yarmarkovichlab/Frank/test_altanalyze/altanalyze_output/ExpressionInput/DEGs-LogFold_0.0_adjp/GE.tumor_vs_normal.txt',sep='\t',index_col=0)
+ensg2adjp_all_normal = deg['adjp'].to_dict()
+ensg2lfc_all_normal = deg['LogFold'].to_dict()
+result['limma_adjp_skin_only'] = result.index.map(ensg2adjp_skin_only).values
+result['limma_lfc_skin_only'] = result.index.map(ensg2lfc_skin_only).values
+result = result.loc[result['limma_adjp_skin_only'].notna(),:]
+result = result.loc[result['limma_lfc_skin_only'].notna(),:]
+result['limma_adjp_all_normal'] = result.index.map(ensg2adjp_all_normal).values
+result['limma_lfc_all_normal'] = result.index.map(ensg2lfc_all_normal).values
+result = result.loc[result['limma_adjp_all_normal'].notna(),:]
+result = result.loc[result['limma_lfc_all_normal'].notna(),:]
 
-# y_preds = {
-#     'BayesTS_ext':np.negative(result['mean_sigma'].values),
-#     'limma_rank':np.negative(result['limma_rank'].values)
-# }
+from scipy.stats import rankdata
 
-# limma_label = [True if p < 0.05 and s > 0.58 else False for p,s in zip(result['limma_adjp'],result['limma_lfc'])]
-# result['limma_label'] = limma_label
+result['lfc_rank_skin_only'] = rankdata(np.negative(result['limma_lfc_skin_only'].values),method='min')
+result['adjp_rank_skin_only'] = rankdata(result['limma_adjp_skin_only'].values,method='min')
+result['limma_rank_skin_only'] = [(r1+r2)/2 for r1,r2 in zip(result['lfc_rank_skin_only'],result['adjp_rank_skin_only'])]
 
-# result.to_csv('deg_bayesTS.txt',sep='\t')
-# draw_PR(result['label'].values,y_preds,'.','PR_curve_deg.pdf')
+result['lfc_rank_all_normal'] = rankdata(np.negative(result['limma_lfc_all_normal'].values),method='min')
+result['adjp_rank_all_normal'] = rankdata(result['limma_adjp_all_normal'].values,method='min')
+result['limma_rank_all_normal'] = [(r1+r2)/2 for r1,r2 in zip(result['lfc_rank_all_normal'],result['adjp_rank_all_normal'])]
+
+y_preds = {
+    'BayesTS_ext':np.negative(result['mean_sigma'].values),
+    'limma_rank_skin_only':np.negative(result['limma_rank_skin_only'].values),
+    'limma_rank_all_normal':np.negative(result['limma_rank_all_normal'].values)
+}
+
+
+result.to_csv('deg_bayesTS_new.txt',sep='\t')
+draw_PR(result['label'].values,y_preds,'.','PR_curve_deg_new.pdf')
+sys.exit('stop')
 
 '''sensitivity'''
 # create such 5 beta distribution

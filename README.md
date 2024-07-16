@@ -66,7 +66,7 @@ python BayesTS.py --input "./coding.h5ad"  # download gene count from synapse
                    --mode "XY"                   
 ```
 
-Full prompt:
+#### Full prompt:
 
 ```
 usage: BayesTS_rev.py [-h] [--input INPUT] [--weight WEIGHT] [--mode MODE]
