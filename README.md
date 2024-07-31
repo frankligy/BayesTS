@@ -36,7 +36,7 @@ git clone https://github.com/frankligy/BayesTS.git
 
  ## Retrain or Adjust tissue importance
 
- You first prepare a plain txt (demiliter is tab) file like this, the valid tissues can be found in [valid_tisse](./database/valid_tissues.txt). I didn't implement any magic function to convert the strings, so please go over these two list (both protein and rna), and choose all tissues, tissue name can be different in RNA and protein, for example, Testis (RNA) and testis (protein), so just include all like below:
+ You first prepare a plain txt (demiliter is tab) file like this, the valid tissues can be found in [valid_tisse](./database/valid_tissues.csv). I didn't implement any magic function to convert the strings, so please go over these two list (both protein and rna), and choose all tissues, tissue name can be different in RNA and protein, for example, Testis (RNA) and testis (protein), so just include all like below:
 
  ```
 # weights.txt
