@@ -1,5 +1,3 @@
-#!/gpfs/data/yarmarkovichlab/Frank/BayesTS/logit_gate_env/bin/python3.7
-
 import anndata as ad  
 import numpy as np
 import pandas as pd
