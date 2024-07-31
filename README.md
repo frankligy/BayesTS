@@ -55,7 +55,7 @@ You need to download RNA or Protein data from [this synapse folder](https://www.
 # help information
 python BayesTS.py --help
 
-# trian using full model including protein
+# trian using full model including protein, below assume you are within BayesTS code folder, but modify accordingly
 python BayesTS.py --input "./gtex_gene_subsample.h5ad"  # download gene count from synapse
                   --weight "./weights.txt"   # see above
                   --mode "XYZ"      # XYZ is full model, XY is RNA model
