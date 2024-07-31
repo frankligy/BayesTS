@@ -39,6 +39,7 @@ git clone https://github.com/frankligy/BayesTS.git
  You first prepare a plain txt (demiliter is tab) file like this, the valid tissues can be found in [valid_tisse](./database/valid_tissues.txt). I didn't implement any magic function to convert the strings, so please go over these two list (both protein and rna), and choose all tissues, tissue name can be different in RNA and protein, for example, Testis (RNA) and testis (protein), so just include all like below:
 
  ```
+# weights.txt
 tissue     weight
 tonsil      0.1
 appendix    0.1
@@ -56,9 +57,10 @@ python BayesTS.py --help
 
 # trian using full model including protein
 python BayesTS.py --input "./gtex_gene_subsample.h5ad"  # download gene count from synapse
-                   --weight "./weights.txt"   # see above
-                   --mode "XYZ"      # XYZ is full model, XY is RNA model
-                   --protein "./normal_tissue.tsv"  # download from synapses
+                  --weight "./weights.txt"   # see above
+                  --mode "XYZ"      # XYZ is full model, XY is RNA model
+                  --protein "./normal_tissue.tsv"  # download from synapses
+                  --outdir "./test"
 
 # train using RNA model if protein is not available
 python BayesTS.py --input "./coding.h5ad"  # download gene count from synapse

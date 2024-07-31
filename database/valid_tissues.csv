@@ -1,0 +1,64 @@
+﻿rna_tissues,protein_tissues
+Adipose - Subcutaneous,adipose tissue
+Muscle - Skeletal,adrenal gland
+Artery - Tibial,appendix
+Artery - Coronary,bone marrow
+Heart - Atrial Appendage,breast
+Adipose - Visceral (Omentum),bronchus
+Uterus,caudate
+Vagina,cerebellum
+Breast - Mammary Tissue,cerebral cortex
+Skin - Not Sun Exposed (Suprapubic),cervix
+Minor Salivary Gland,colon
+Brain - Cortex,duodenum
+Adrenal Gland,endometrium 1
+Thyroid,endometrium 2
+Lung,epididymis
+Spleen,esophagus
+Pancreas,fallopian tube
+Esophagus - Muscularis,gallbladder
+Esophagus - Mucosa,heart muscle
+Esophagus - Gastroesophageal Junction,hippocampus
+Stomach,kidney
+Colon - Sigmoid,liver
+Small Intestine - Terminal Ileum,lung
+Colon - Transverse,lymph node
+Prostate,nasopharynx
+Testis,oral mucosa
+Nerve - Tibial,ovary
+Skin - Sun Exposed (Lower leg),pancreas
+Heart - Left Ventricle,parathyroid gland
+Brain - Cerebellum,placenta
+Whole Blood,prostate
+Artery - Aorta,rectum
+Pituitary,salivary gland
+Brain - Frontal Cortex (BA9),seminal vesicle
+Brain - Caudate (basal ganglia),skeletal muscle
+Brain - Nucleus accumbens (basal ganglia),skin 1
+Brain - Putamen (basal ganglia),skin 2
+Brain - Hypothalamus,small intestine
+Brain - Spinal cord (cervical c-1),smooth muscle
+Brain - Hippocampus,soft tissue 1
+Brain - Anterior cingulate cortex (BA24),soft tissue 2
+Ovary,spleen
+Brain - Cerebellar Hemisphere,stomach 1
+Liver,stomach 2
+Brain - Substantia nigra,testis
+Kidney - Cortex,thyroid gland
+Brain - Amygdala,tonsil
+Cervix - Endocervix,urinary bladder
+Bladder,vagina
+,hypothalamus
+,endometrium
+,hair
+,retina
+,lactating breast
+,skin
+,thymus
+,cartilage
+,eye
+,pituitary gland
+,choroid plexus
+,dorsal raphe
+,substantia nigra
+,sole of foot
