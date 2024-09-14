@@ -1,0 +1,16 @@
+tissue	weight
+adrenal gland	0
+appendix	0
+cervix	0
+endometrium 1	0
+endometrium 2	0
+fallopian tube	0
+placenta	0
+prostate	0
+seminal vesicle	0
+testis	0
+vagina	0
+endometrium	0
+thymus	0
+eye	0
+pituitary gland	0
