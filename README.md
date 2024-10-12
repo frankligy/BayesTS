@@ -1,3 +1,6 @@
+[![DOI](https://zenodo.org/badge/605715442.svg)](https://doi.org/10.5281/zenodo.13922316)
+
+
 # BayesTS
 Quantifying Tumor Specificity using Bayesian probabilistic modeling for drug target discovery and prioritization
 
