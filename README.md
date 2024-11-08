@@ -121,17 +121,17 @@ Li, Guangyuan, Anukana Bhattacharjee, and Nathan Salomonis. 2023. “Quantifying
 
 - If you are using Version 2 (Current Version):
 
-Quantifying tumor specificity using Bayesian probabilistic modeling for drug and immunotherapeutic target discovery, In Revision
+Guangyuan Li, Daniel Schnell, Anukana Bhattacharjee, Mark Yarmarkovich, Nathan Salomonis. 2024 “Quantifying tumor specificity using Bayesian probabilistic modeling for drug and immunotherapeutic target discovery.” Cell Reports Methods. https://doi.org/10.1016/j.crmeth.2024.100900 
 
 ## Contact
 
 Guangyuan(Frank) Li
 
-Email: li2g2@mail.uc.edu
+Email: guangyuan.li@nyulangone.org
 
-PhD student, Biomedical Informatics
+Postdoc, Perlmutter Cancer Center
 
-Cincinnati Children’s Hospital Medical Center(CCHMC)
+NYU Grossman School of Medicine
 
-University of Cincinnati, College of Medicine
+
 
