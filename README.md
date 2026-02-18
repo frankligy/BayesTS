@@ -127,7 +127,7 @@ Guangyuan Li, Daniel Schnell, Anukana Bhattacharjee, Mark Yarmarkovich, Nathan S
 
 Guangyuan(Frank) Li
 
-Email: guangyuan.li@nyulangone.org
+Email: li2g2@mail.uc.edu
 
 Postdoc, Perlmutter Cancer Center
 
